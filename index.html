@@ -117,12 +117,13 @@
         let userAccounts = JSON.parse(localStorage.getItem('duelMasterUserAccounts')) || [];
         let loggedInUserId = localStorage.getItem('duelMasterLoggedInUserId');
         let currentUserBalance = 0; // Will be updated on login
+        let isCurrentUserAdmin = false; // Track admin status
 
         // Initialize admin accounts if they don't exist
         const initialAdminAccounts = [
-            { id: 'Greed', password: '88912163', emailOrPhone: 'admin1@example.com', balance: 1000000, isAdmin: true },
-            { id: 'Pride', password: 'ErmuunAdmin', emailOrPhone: 'admin2@example.com', balance: 1000000, isAdmin: true },
-            { id: 'Lust', password: 'BilguunAdmin', emailOrPhone: 'admin3@example.com', balance: 1000000, isAdmin: true },
+            { id: 'Greed', password: '88912163', email: 'greed@admin.com', phone: '', balance: 1000000, isAdmin: true },
+            { id: 'Pride', password: 'ErmuunAdmin', email: 'pride@admin.com', phone: '', balance: 1000000, isAdmin: true },
+            { id: 'Lust', password: 'BilguunAdmin', email: 'lust@admin.com', phone: '', balance: 1000000, isAdmin: true },
         ];
 
         // Only add default admins if userAccounts is empty (first run)
@@ -223,6 +224,7 @@
             if (user) {
                 loggedInUserId = user.id;
                 currentUserBalance = user.balance;
+                isCurrentUserAdmin = user.isAdmin || false; // Set admin status
                 saveState();
                 showModal('Login Successful', `Welcome, ${loggedInUserId}! Your balance: ${currentUserBalance.toLocaleString()} ₮`);
                 renderMainAppContent(); // Show main app after login
@@ -234,6 +236,7 @@
         const logoutUser = () => {
             loggedInUserId = null;
             currentUserBalance = 0;
+            isCurrentUserAdmin = false;
             saveState();
             showModal('Logged Out', 'You have been logged out.');
             renderLogin(); // Show login screen
@@ -256,10 +259,15 @@
         const renderNavButtons = () => {
             mainNav.innerHTML = ''; // Clear existing buttons
             if (loggedInUserId) {
-                mainNav.innerHTML = `
-                    <button id="registerPlayerTabBtn" class="px-4 py-2 rounded-md font-medium transition duration-150 ease-in-out bg-indigo-600 text-white shadow-md hover:bg-indigo-700">
-                        Register Player
-                    </button>
+                if (isCurrentUserAdmin) {
+                    mainNav.innerHTML += `
+                        <button id="registerPlayerTabBtn" class="px-4 py-2 rounded-md font-medium transition duration-150 ease-in-out bg-indigo-600 text-white shadow-md hover:bg-indigo-700">
+                            Register Player
+                        </button>
+                    `;
+                    document.getElementById('registerPlayerTabBtn').addEventListener('click', () => activateTab('registerPlayer'));
+                }
+                mainNav.innerHTML += `
                     <button id="playersTabBtn" class="px-4 py-2 rounded-md font-medium transition duration-150 ease-in-out bg-gray-700 text-gray-300 hover:bg-gray-600">
                         Player List
                     </button>
@@ -273,7 +281,6 @@
                         Logout (${loggedInUserId})
                     </button>
                 `;
-                document.getElementById('registerPlayerTabBtn').addEventListener('click', () => activateTab('registerPlayer'));
                 document.getElementById('playersTabBtn').addEventListener('click', () => activateTab('players'));
                 document.getElementById('requestsTabBtn').addEventListener('click', () => activateTab('requests'));
                 document.getElementById('duelsTabBtn').addEventListener('click', () => activateTab('duels'));
@@ -383,14 +390,25 @@
                         <input type="password" id="registerPassword" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${isUserLoggedIn ? 'disabled' : 'required'}>
                         <p id="passwordStrength" class="text-xs mt-1 text-gray-400">Password must be at least 8 characters long, contain uppercase, lowercase, number, and special character.</p>
                     </div>
+                </fieldset>
+            `;
+
+            const contactInfoSection = `
+                <fieldset class="border border-gray-700 p-4 rounded-md space-y-4 ${isUserLoggedIn ? 'hidden' : ''}">
+                    <legend class="text-lg font-semibold text-gray-200 px-2">Contact Information (for recovery)</legend>
                     <div>
                         <label for="confirmPassword" class="block text-sm font-medium text-gray-300">Confirm Password</label>
                         <input type="password" id="confirmPassword" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${isUserLoggedIn ? 'disabled' : 'required'}>
                         <p id="confirmPasswordError" class="text-red-400 text-xs mt-1 hidden">Passwords do not match.</p>
                     </div>
                     <div>
-                        <label for="emailOrPhone" class="block text-sm font-medium text-gray-300">Email or Phone Number (for recovery)</label>
-                        <input type="text" id="emailOrPhone" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${isUserLoggedIn ? 'disabled' : 'required'}>
+                        <label for="email" class="block text-sm font-medium text-gray-300">Email (Optional)</label>
+                        <input type="email" id="email" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${isUserLoggedIn ? 'disabled' : ''}>
+                    </div>
+                    <div>
+                        <label for="phone" class="block text-sm font-medium text-gray-300">Phone Number (Optional)</label>
+                        <input type="tel" id="phone" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${isUserLoggedIn ? 'disabled' : ''}>
+                        <p id="contactError" class="text-red-400 text-xs mt-1 hidden">Please provide either an email or a phone number.</p>
                     </div>
                 </fieldset>
             `;
@@ -445,16 +463,16 @@
                                         <input type="radio" name="idType" value="normal" checked class="form-radio text-indigo-500" id="normalIdRadio">
                                         <span class="ml-2 text-gray-300">Normal ID (Free)</span>
                                     </label>
-                                    <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 ${availableSilver.length === 0 || currentUserBalance < SILVER_ID_COST ? 'opacity-50 cursor-not-allowed' : ''}">
-                                        <input type="radio" name="idType" value="silver" class="form-radio text-indigo-500" id="silverIdRadio" ${availableSilver.length === 0 || currentUserBalance < SILVER_ID_COST ? 'disabled' : ''}>
+                                    <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 ${availableSilver.length === 0 || (isUserLoggedIn ? currentUserBalance : 500000) < SILVER_ID_COST ? 'opacity-50 cursor-not-allowed' : ''}">
+                                        <input type="radio" name="idType" value="silver" class="form-radio text-indigo-500" id="silverIdRadio" ${availableSilver.length === 0 || (isUserLoggedIn ? currentUserBalance : 500000) < SILVER_ID_COST ? 'disabled' : ''}>
                                         <span class="ml-2 text-gray-300">Silver ID (${SILVER_ID_COST.toLocaleString()} ₮)</span>
                                     </label>
-                                    <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 ${availableGolden.length === 0 || currentUserBalance < GOLDEN_ID_COST ? 'opacity-50 cursor-not-allowed' : ''}">
-                                        <input type="radio" name="idType" value="golden" class="form-radio text-indigo-500" id="goldenIdRadio" ${availableGolden.length === 0 || currentUserBalance < GOLDEN_ID_COST ? 'disabled' : ''}>
+                                    <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 ${availableGolden.length === 0 || (isUserLoggedIn ? currentUserBalance : 500000) < GOLDEN_ID_COST ? 'opacity-50 cursor-not-allowed' : ''}">
+                                        <input type="radio" name="idType" value="golden" class="form-radio text-indigo-500" id="goldenIdRadio" ${availableGolden.length === 0 || (isUserLoggedIn ? currentUserBalance : 500000) < GOLDEN_ID_COST ? 'disabled' : ''}>
                                         <span class="ml-2 text-gray-300">Golden ID (${GOLDEN_ID_COST.toLocaleString()} ₮)</span>
                                     </label>
-                                    <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 ${currentUserBalance < SPECIAL_ID_COST ? 'opacity-50 cursor-not-allowed' : ''}">
-                                        <input type="radio" name="idType" value="special" class="form-radio text-indigo-500" id="specialIdRadio" ${currentUserBalance < SPECIAL_ID_COST ? 'disabled' : ''}>
+                                    <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 ${ (isUserLoggedIn ? currentUserBalance : 500000) < SPECIAL_ID_COST ? 'opacity-50 cursor-not-allowed' : ''}">
+                                        <input type="radio" name="idType" value="special" class="form-radio text-indigo-500" id="specialIdRadio" ${ (isUserLoggedIn ? currentUserBalance : 500000) < SPECIAL_ID_COST ? 'disabled' : ''}>
                                         <span class="ml-2 text-gray-300">Special ID (${SPECIAL_ID_COST.toLocaleString()} ₮)</span>
                                     </label>
                                 </div>
@@ -479,6 +497,7 @@
                                 </div>
                             </div>
                         </fieldset>
+                        ${contactInfoSection} <!-- Moved here -->
 
                         <button type="submit" class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
                             ${isUserLoggedIn ? 'Register New Player' : 'Sign Up & Create Player'}
@@ -499,7 +518,9 @@
             const confirmPasswordInput = document.getElementById('confirmPassword');
             const confirmPasswordError = document.getElementById('confirmPasswordError');
             const passwordStrength = document.getElementById('passwordStrength');
-            const emailOrPhoneInput = document.getElementById('emailOrPhone');
+            const emailInput = document.getElementById('email');
+            const phoneInput = document.getElementById('phone');
+            const contactError = document.getElementById('contactError');
 
             const playerNameInput = document.getElementById('playerName');
             const photoUpload = document.getElementById('photoUpload');
@@ -685,7 +706,6 @@
                 e.preventDefault();
 
                 let currentUserIdForPlayer = loggedInUserId; // Default to logged-in user
-                let accountCost = 0; // Cost for user account creation (none in this model)
                 let playerCost = 0; // Cost for player ID
 
                 // --- Account Validation (if not logged in) ---
@@ -693,11 +713,18 @@
                     const userId = registerUserIdInput.value.trim();
                     const password = registerPasswordInput.value;
                     const confirmPassword = confirmPasswordInput.value;
-                    const emailOrPhone = emailOrPhoneInput.value.trim();
+                    const email = emailInput.value.trim();
+                    const phone = phoneInput.value.trim();
 
-                    if (!userId || !password || !emailOrPhone) {
-                        showModal('Registration Error', 'All account fields (User ID, Password, Email/Phone) are required.');
+                    if (!userId || !password) {
+                        showModal('Registration Error', 'User ID and Password are required.');
                         return;
+                    }
+                    if (!email && !phone) {
+                        contactError.classList.remove('hidden');
+                        return;
+                    } else {
+                        contactError.classList.add('hidden');
                     }
                     if (password !== confirmPassword) {
                         showModal('Registration Error', 'Passwords do not match.');
@@ -793,11 +820,6 @@
                 if (!isUserLoggedIn) {
                     // This is a new user registering their first player
                     let initialUserBalance = 500000; // Give regular new users a starting balance
-                    if (initialAdminAccounts.some(acc => acc.id === currentUserIdForPlayer)) {
-                        // This case should ideally not happen if admin accounts are pre-initialized,
-                        // but as a safeguard, admins don't get this bonus again.
-                        initialUserBalance = 0;
-                    }
 
                     if (playerCost > 0 && initialUserBalance < playerCost) {
                         showModal('Payment Error', `Insufficient starting balance. You need ${playerCost.toLocaleString()} ₮ to select this ID. Your starting balance is ${initialUserBalance.toLocaleString()} ₮. Please choose a free ID or contact an admin for a top-up.`);
@@ -808,13 +830,15 @@
                     const newUserAccount = {
                         id: currentUserIdForPlayer,
                         password: registerPasswordInput.value,
-                        emailOrPhone: emailOrPhoneInput.value.trim(),
+                        email: emailInput.value.trim(),
+                        phone: phoneInput.value.trim(),
                         balance: finalUserBalance,
                         isAdmin: false,
                     };
                     userAccounts.push(newUserAccount);
                     loggedInUserId = newUserAccount.id; // Auto-login
                     currentUserBalance = newUserAccount.balance;
+                    isCurrentUserAdmin = newUserAccount.isAdmin;
                     userAccountCreated = true;
 
                 } else {
@@ -1545,7 +1569,14 @@
 
             switch (tab) {
                 case 'registerPlayer':
-                    renderRegisterPlayer();
+                    // Only render if admin
+                    if (isCurrentUserAdmin) {
+                        renderRegisterPlayer();
+                    } else {
+                        // If not admin, redirect to players list
+                        showModal('Access Denied', 'Only administrators can register new players.');
+                        activateTab('players');
+                    }
                     break;
                 case 'players':
                     renderPlayerList();
@@ -1571,7 +1602,22 @@
 
         // Initial render on page load
         document.addEventListener('DOMContentLoaded', () => {
-            renderContent(loggedInUserId ? 'players' : 'login'); // Start with login if not logged in, otherwise players
+            // Check if user is already logged in from previous session
+            if (loggedInUserId) {
+                const user = userAccounts.find(acc => acc.id === loggedInUserId);
+                if (user) {
+                    currentUserBalance = user.balance;
+                    isCurrentUserAdmin = user.isAdmin || false;
+                    renderMainAppContent();
+                } else {
+                    // Logged in user ID found, but account not found (e.g., localStorage cleared partially)
+                    loggedInUserId = null;
+                    saveState();
+                    renderLogin();
+                }
+            } else {
+                renderLogin(); // Start with login if not logged in
+            }
         });
     </script>
 </body>
