@@ -8,6 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Inter Font -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for password toggle icon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -76,6 +78,20 @@
         }
         input[type="file"]::file-selector-button:hover {
             background-color: #5a67d8; /* hover:violet-600 */
+        }
+        .password-input-container {
+            position: relative;
+        }
+        .password-toggle {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: #a0aec0; /* gray-400 */
+        }
+        .password-toggle:hover {
+            color: #e2e8f0; /* gray-200 */
         }
     </style>
 </head>
@@ -157,9 +173,15 @@
 
         let usedSpecialIds = new Set(JSON.parse(localStorage.getItem('duelMasterUsedSpecialIds')) || []);
 
-        // Helper to check if an ID is already used by any player or user account
-        const isIdUsed = (id) => {
-            return players.some(p => p.id === id) || userAccounts.some(u => u.id === id) || usedSpecialIds.has(id);
+        // Helper to check if an ID is already used by any player or user account (case-insensitive for user IDs)
+        const isIdUsed = (id, isPlayerId = true) => {
+            const lowerId = id.toLowerCase();
+            if (isPlayerId) {
+                if (players.some(p => p.id.toLowerCase() === lowerId)) return true;
+            }
+            if (userAccounts.some(u => u.id.toLowerCase() === lowerId)) return true;
+            if (usedSpecialIds.has(id)) return true; // Special IDs are stored as they are, so check directly
+            return false;
         };
 
         const getAvailableSilverIds = () => silverIdsPool.filter(id => !isIdUsed(id));
@@ -218,11 +240,30 @@
             document.getElementById('modalOverlay').classList.add('hidden');
         };
 
+        // --- Password Toggle Function ---
+        const setupPasswordToggle = (inputId) => {
+            const input = document.getElementById(inputId);
+            const toggleIcon = document.getElementById(`${inputId}Toggle`);
+            if (input && toggleIcon) {
+                toggleIcon.addEventListener('click', () => {
+                    if (input.type === 'password') {
+                        input.type = 'text';
+                        toggleIcon.classList.remove('fa-eye');
+                        toggleIcon.classList.add('fa-eye-slash');
+                    } else {
+                        input.type = 'password';
+                        toggleIcon.classList.remove('fa-eye-slash');
+                        toggleIcon.classList.add('fa-eye');
+                    }
+                });
+            }
+        };
+
         // --- Login/Logout & User Management ---
         const loginUser = (id, password) => {
-            const user = userAccounts.find(acc => acc.id === id && acc.password === password);
+            const user = userAccounts.find(acc => acc.id.toLowerCase() === id.toLowerCase() && acc.password === password);
             if (user) {
-                loggedInUserId = user.id;
+                loggedInUserId = user.id; // Store the actual ID from the userAccounts array
                 currentUserBalance = user.balance;
                 isCurrentUserAdmin = user.isAdmin || false; // Set admin status
                 saveState();
@@ -316,16 +357,17 @@
                             <label for="loginId" class="block text-sm font-medium text-gray-300">User ID</label>
                             <input type="text" id="loginId" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
                         </div>
-                        <div>
+                        <div class="password-input-container">
                             <label for="loginPassword" class="block text-sm font-medium text-gray-300">Password</label>
                             <input type="password" id="loginPassword" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                            <i class="fas fa-eye password-toggle" id="loginPasswordToggle"></i>
                         </div>
                         <button type="submit" class="w-full py-2.5 px-4 border border-transparent rounded-md shadow-sm text-lg font-semibold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
                             Login
                         </button>
                     </form>
                     <p class="mt-6 text-center text-gray-400">
-                        Don't have an account? <button id="switchToRegisterPlayerBtn" class="text-indigo-400 hover:text-indigo-300 font-medium">Register a new player & account</button>
+                        Don't have an account? <button id="switchToRegisterPlayerBtn" class="text-indigo-400 hover:text-indigo-300 font-medium">Sign Up & Create Player Profile</button>
                     </p>
                     <p class="mt-2 text-center text-gray-500 text-sm">
                         Forgot password? (Contact admin for recovery)
@@ -343,12 +385,14 @@
             });
 
             document.getElementById('switchToRegisterPlayerBtn').addEventListener('click', () => activateTab('registerPlayer'));
+            setupPasswordToggle('loginPassword');
             renderNavButtons(); // Clear nav buttons when not logged in
         };
 
         // --- Render Main App Content (after login) ---
         const renderMainAppContent = () => {
-            document.getElementById('loggedInUserIdDisplay').textContent = loggedInUserId;
+            const user = userAccounts.find(acc => acc.id === loggedInUserId);
+            document.getElementById('loggedInUserIdDisplay').textContent = user ? user.id.toUpperCase() : 'Not Logged In'; // Admin IDs always uppercase
             updateBalanceDisplay();
             renderNavButtons(); // Show nav buttons after login
             activateTab('players'); // Default to player list tab after login
@@ -377,37 +421,41 @@
             `).join('');
 
             const isUserLoggedIn = loggedInUserId !== null;
+            const showAccountDetails = !isUserLoggedIn || isCurrentUserAdmin; // Show if not logged in OR if admin
+
             const userAccountSection = `
-                <fieldset class="border border-gray-700 p-4 rounded-md space-y-4 ${isUserLoggedIn ? 'hidden' : ''}">
+                <fieldset class="border border-gray-700 p-4 rounded-md space-y-4 ${showAccountDetails ? '' : 'hidden'}">
                     <legend class="text-lg font-semibold text-gray-200 px-2">Account Details</legend>
                     <div>
                         <label for="registerUserId" class="block text-sm font-medium text-gray-300">Choose Your User ID</label>
-                        <input type="text" id="registerUserId" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${isUserLoggedIn ? 'disabled' : 'required'}>
+                        <input type="text" id="registerUserId" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${showAccountDetails ? 'required' : 'disabled'}>
                         <p id="registerUserIdError" class="text-red-400 text-xs mt-1 hidden">User ID must be unique.</p>
                     </div>
-                    <div>
+                    <div class="password-input-container">
                         <label for="registerPassword" class="block text-sm font-medium text-gray-300">Password</label>
-                        <input type="password" id="registerPassword" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${isUserLoggedIn ? 'disabled' : 'required'}>
+                        <input type="password" id="registerPassword" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${showAccountDetails ? 'required' : 'disabled'}>
+                        <i class="fas fa-eye password-toggle" id="registerPasswordToggle"></i>
                         <p id="passwordStrength" class="text-xs mt-1 text-gray-400">Password must be at least 8 characters long, contain uppercase, lowercase, number, and special character.</p>
                     </div>
                 </fieldset>
             `;
 
             const contactInfoSection = `
-                <fieldset class="border border-gray-700 p-4 rounded-md space-y-4 ${isUserLoggedIn ? 'hidden' : ''}">
+                <fieldset class="border border-gray-700 p-4 rounded-md space-y-4 ${showAccountDetails ? '' : 'hidden'}">
                     <legend class="text-lg font-semibold text-gray-200 px-2">Contact Information (for recovery)</legend>
-                    <div>
+                    <div class="password-input-container">
                         <label for="confirmPassword" class="block text-sm font-medium text-gray-300">Confirm Password</label>
-                        <input type="password" id="confirmPassword" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${isUserLoggedIn ? 'disabled' : 'required'}>
+                        <input type="password" id="confirmPassword" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${showAccountDetails ? 'required' : 'disabled'}>
+                        <i class="fas fa-eye password-toggle" id="confirmPasswordToggle"></i>
                         <p id="confirmPasswordError" class="text-red-400 text-xs mt-1 hidden">Passwords do not match.</p>
                     </div>
                     <div>
                         <label for="email" class="block text-sm font-medium text-gray-300">Email (Optional)</label>
-                        <input type="email" id="email" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${isUserLoggedIn ? 'disabled' : ''}>
+                        <input type="email" id="email" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${showAccountDetails ? '' : 'disabled'}>
                     </div>
                     <div>
                         <label for="phone" class="block text-sm font-medium text-gray-300">Phone Number (Optional)</label>
-                        <input type="tel" id="phone" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${isUserLoggedIn ? 'disabled' : ''}>
+                        <input type="tel" id="phone" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${showAccountDetails ? '' : 'disabled'}>
                         <p id="contactError" class="text-red-400 text-xs mt-1 hidden">Please provide either an email or a phone number.</p>
                     </div>
                 </fieldset>
@@ -492,7 +540,7 @@
                                     </select>
                                 </div>
                                 <div id="specialIdInput" class="mt-2 hidden">
-                                    <label for="customSpecialId" class="block text-sm font-medium text-gray-300">Enter Custom Special ID (No numbers)</label>
+                                    <label for="customSpecialId" class="block text-sm font-medium text-gray-300">Enter Custom Special ID (No numbers, 3+ chars)</label>
                                     <input type="text" id="customSpecialId" placeholder="e.g., MYDUELID" class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
                                 </div>
                             </div>
@@ -546,6 +594,10 @@
             let selectedGames = []; // Stores only game names
             let gameSpecificRanks = {}; // Stores { 'Game Name': 'Rank Value' }
 
+            // Setup password toggles for this form
+            setupPasswordToggle('registerPassword');
+            setupPasswordToggle('confirmPassword');
+
             const updateSelectedGamesDisplay = () => {
                 selectedGamesDisplay.textContent = selectedGames.length > 0 ? selectedGames.join(', ') : 'No games selected';
                 gamesSelectBtn.textContent = selectedGames.length > 0 ? `Selected (${selectedGames.length})` : 'Select Games';
@@ -576,7 +628,7 @@
                             <label for="rank-${game.replace(/\s/g, '-')}" class="block text-sm font-medium text-gray-300">${game} Rank</label>
                             <select id="rank-${game.replace(/\s/g, '-')}" data-game="${game}" class="game-rank-input mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
                                 <option value="">-- Select Rank --</option>
-                                ${optionsHtml}
+                                ${options}
                             </select>
                         `;
                     } else {
@@ -667,8 +719,8 @@
             idTypeRadios.forEach(radio => radio.addEventListener('change', toggleIdTypeVisibility));
             toggleIdTypeVisibility();
 
-            const validatePassword = () => {
-                if (!isUserLoggedIn) {
+            const validatePasswordInput = () => {
+                if (showAccountDetails) { // Only validate if account details are visible/enabled
                     const pass = registerPasswordInput.value;
                     let strength = 0;
                     if (pass.length >= 8) strength++;
@@ -689,8 +741,8 @@
                 }
             };
 
-            if (!isUserLoggedIn) {
-                registerPasswordInput.addEventListener('input', validatePassword);
+            if (showAccountDetails) {
+                registerPasswordInput.addEventListener('input', validatePasswordInput);
                 confirmPasswordInput.addEventListener('input', () => {
                     if (registerPasswordInput.value !== confirmPasswordInput.value) {
                         confirmPasswordError.classList.remove('hidden');
@@ -698,6 +750,9 @@
                         confirmPasswordError.classList.add('hidden');
                     }
                 });
+            }
+
+            if (!isUserLoggedIn) {
                 document.getElementById('switchToLoginBtn').addEventListener('click', renderLogin);
             }
 
@@ -707,9 +762,10 @@
 
                 let currentUserIdForPlayer = loggedInUserId; // Default to logged-in user
                 let playerCost = 0; // Cost for player ID
+                let newAccountCreated = false;
 
-                // --- Account Validation (if not logged in) ---
-                if (!isUserLoggedIn) {
+                // --- Account Validation (if new user or admin creating new user) ---
+                if (showAccountDetails) {
                     const userId = registerUserIdInput.value.trim();
                     const password = registerPasswordInput.value;
                     const confirmPassword = confirmPasswordInput.value;
@@ -734,7 +790,7 @@
                          showModal('Registration Error', 'Password must be at least 8 characters long and contain uppercase, lowercase, number, and special character.');
                          return;
                     }
-                    if (isIdUsed(userId)) { // Check if User ID is unique
+                    if (isIdUsed(userId, false)) { // Check if User ID is unique (pass false for isPlayerId to check only userAccounts and special IDs)
                         showModal('Registration Error', 'This User ID is already taken. Please choose another.');
                         return;
                     }
@@ -744,7 +800,7 @@
                 // --- Player Profile Validation ---
                 const playerName = playerNameInput.value;
                 const age = ageInput.value;
-                const weight = weightInput.value;
+                const weight = weightInput.getElementById('weight').value;
                 const idType = document.querySelector('input[name="idType"]:checked').value;
                 let playerId;
 
@@ -777,7 +833,7 @@
                         showModal('Registration Error', 'Please select a Silver ID for your player profile.');
                         return;
                     }
-                    if (isIdUsed(selectedSilverId)) {
+                    if (isIdUsed(selectedSilverId, true)) { // Check if Player ID is unique
                         showModal('Registration Error', 'Selected Silver ID is already taken. Please choose another.');
                         return;
                     }
@@ -789,7 +845,7 @@
                         showModal('Registration Error', 'Please select a Golden ID for your player profile.');
                         return;
                     }
-                    if (isIdUsed(selectedGoldenId)) {
+                    if (isIdUsed(selectedGoldenId, true)) { // Check if Player ID is unique
                         showModal('Registration Error', 'Selected Golden ID is already taken. Please choose another.');
                         return;
                     }
@@ -801,11 +857,15 @@
                         showModal('Registration Error', 'Please enter a custom Special ID for your player profile.');
                         return;
                     }
+                    if (customId.length < 3) { // Special ID min length validation
+                        showModal('Registration Error', 'Special ID must be at least 3 characters long.');
+                        return;
+                    }
                     if (/\d/.test(customId)) {
                         showModal('Registration Error', 'Special ID cannot contain numbers. Please use only letters, hyphens, or other non-numeric characters.');
                         return;
                     }
-                    if (isIdUsed(customId)) {
+                    if (isIdUsed(customId, true)) { // Check if Player ID is unique
                         showModal('Registration Error', 'This custom Special ID is already taken. Please choose another.');
                         return;
                     }
@@ -813,20 +873,19 @@
                     playerCost = SPECIAL_ID_COST;
                 }
 
+                // Determine effective balance for cost check
+                let balanceForCheck = isUserLoggedIn ? currentUserBalance : 500000; // New users get 500k starting balance
+
+                if (playerCost > 0 && balanceForCheck < playerCost) {
+                    showModal('Payment Error', `Insufficient balance. You need ${playerCost.toLocaleString()} ₮ but have ${balanceForCheck.toLocaleString()} ₮.`);
+                    return;
+                }
+
                 // Handle balance deduction and user account creation/update
-                let finalUserBalance = currentUserBalance;
-                let userAccountCreated = false;
+                let finalUserBalance = balanceForCheck - playerCost;
 
                 if (!isUserLoggedIn) {
                     // This is a new user registering their first player
-                    let initialUserBalance = 500000; // Give regular new users a starting balance
-
-                    if (playerCost > 0 && initialUserBalance < playerCost) {
-                        showModal('Payment Error', `Insufficient starting balance. You need ${playerCost.toLocaleString()} ₮ to select this ID. Your starting balance is ${initialUserBalance.toLocaleString()} ₮. Please choose a free ID or contact an admin for a top-up.`);
-                        return;
-                    }
-                    finalUserBalance = initialUserBalance - playerCost;
-
                     const newUserAccount = {
                         id: currentUserIdForPlayer,
                         password: registerPasswordInput.value,
@@ -839,14 +898,10 @@
                     loggedInUserId = newUserAccount.id; // Auto-login
                     currentUserBalance = newUserAccount.balance;
                     isCurrentUserAdmin = newUserAccount.isAdmin;
-                    userAccountCreated = true;
+                    newAccountCreated = true;
 
                 } else {
                     // User is already logged in, registering another player
-                    if (playerCost > 0 && currentUserBalance < playerCost) {
-                        showModal('Payment Error', `Insufficient balance. You need ${playerCost.toLocaleString()} ₮ but have ${currentUserBalance.toLocaleString()} ₮.`);
-                        return;
-                    }
                     const loggedInAccount = userAccounts.find(acc => acc.id === loggedInUserId);
                     if (loggedInAccount) {
                         loggedInAccount.balance -= playerCost;
@@ -870,7 +925,8 @@
                     photoUrl: finalPhotoUrl,
                     status: 'available',
                     registeredBy: currentUserIdForPlayer, // Link to the user account
-                    games: playerGamesWithRanks
+                    games: playerGamesWithRanks,
+                    idType: idType // Store ID type for display formatting
                 };
                 players.push(newPlayer);
 
@@ -888,7 +944,7 @@
                 renderGameRankInputs();
                 toggleIdTypeVisibility();
 
-                if (userAccountCreated) {
+                if (newAccountCreated) {
                     renderMainAppContent(); // Go to main app after new user registration
                 } else {
                     activateTab('players'); // Go to player list after adding another player
@@ -995,10 +1051,18 @@
                             ? player.games.map(game => `<li>${game.name}: ${game.rank}</li>`).join('')
                             : '<li>N/A</li>';
 
-                        // Display Silver IDs without leading zeros for readability
-                        const displayedPlayerId = (player.id.length === 5 && !isNaN(player.id) && player.id.startsWith('0'))
-                            ? parseInt(player.id).toString()
-                            : player.id;
+                        let displayedPlayerId = player.id;
+                        if (player.idType === 'silver' && player.id.length === 5 && !isNaN(player.id) && player.id.startsWith('0')) {
+                            displayedPlayerId = parseInt(player.id).toString();
+                        } else if (player.idType === 'special') {
+                            displayedPlayerId = player.id.charAt(0).toUpperCase() + player.id.slice(1).toLowerCase();
+                        }
+                        // Check if the player's registeredBy ID is an admin ID and display it in uppercase
+                        const registeredByUser = userAccounts.find(acc => acc.id === player.registeredBy);
+                        const registeredByDisplay = registeredByUser && registeredByUser.isAdmin
+                            ? `Registered by: ${registeredByUser.id.toUpperCase()}`
+                            : `Registered by: ${player.registeredBy}`;
+
 
                         playersHtml += `
                             <div class="flex items-center bg-gray-700 p-4 rounded-lg shadow-md border border-gray-600">
@@ -1006,6 +1070,7 @@
                                 <div class="flex-grow">
                                     <h3 class="text-lg font-semibold text-gray-100">${player.name}</h3>
                                     <p class="text-xs text-gray-400">ID: ${displayedPlayerId}</p>
+                                    <p class="text-xs text-gray-500">${registeredByDisplay}</p>
                                     <div class="text-sm text-gray-300">
                                         <p>Age: ${player.age}</p>
                                         <p>Weight: ${player.weight} kg</p>
@@ -1374,12 +1439,12 @@
                     const player1 = players.find(p => p.id === duel.player1Id);
                     const player2 = players.find(p => p.id === duel.player2Id);
                     // Display Silver IDs without leading zeros for readability in duel cards
-                    const displayedPlayer1Id = (player1?.id.length === 5 && !isNaN(player1?.id) && player1?.id.startsWith('0'))
+                    const displayedPlayer1Id = (player1?.idType === 'silver' && player1?.id.length === 5 && !isNaN(player1?.id) && player1?.id.startsWith('0'))
                         ? parseInt(player1.id).toString()
-                        : player1?.id;
-                    const displayedPlayer2Id = (player2?.id.length === 5 && !isNaN(player2?.id) && player2?.id.startsWith('0'))
+                        : (player1?.idType === 'special' ? player1.id.charAt(0).toUpperCase() + player1.id.slice(1).toLowerCase() : player1?.id);
+                    const displayedPlayer2Id = (player2?.idType === 'silver' && player2?.id.length === 5 && !isNaN(player2?.id) && player2?.id.startsWith('0'))
                         ? parseInt(player2.id).toString()
-                        : player2?.id;
+                        : (player2?.idType === 'special' ? player2.id.charAt(0).toUpperCase() + player2.id.slice(1).toLowerCase() : player2?.id);
 
                     duelsHtml += `
                         <div class="bg-gradient-to-br from-purple-800 to-indigo-800 p-4 rounded-lg shadow-md border border-purple-700">
@@ -1559,7 +1624,8 @@
 
         // --- Main Render Logic ---
         const renderContent = (tab) => {
-            document.getElementById('loggedInUserIdDisplay').textContent = loggedInUserId || 'Not Logged In';
+            const user = userAccounts.find(acc => acc.id === loggedInUserId);
+            document.getElementById('loggedInUserIdDisplay').textContent = user ? user.id.toUpperCase() : 'Not Logged In';
             updateBalanceDisplay(); // Always update balance display
 
             if (!loggedInUserId) {
@@ -1573,7 +1639,7 @@
                     if (isCurrentUserAdmin) {
                         renderRegisterPlayer();
                     } else {
-                        // If not admin, redirect to players list
+                        // If not admin, redirect to players list and show error
                         showModal('Access Denied', 'Only administrators can register new players.');
                         activateTab('players');
                     }
