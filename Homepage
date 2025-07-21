@@ -1,0 +1,1538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Duel Master App</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            background-color: #1a202c; /* bg-gray-900 */
+            color: #e2e8f0; /* text-gray-200 */
+        }
+        /* Custom styling for multi-select dropdown */
+        .multi-select-dropdown {
+            position: relative;
+        }
+        .multi-select-dropdown-options {
+            position: absolute;
+            background-color: #2d3748; /* gray-800 */
+            border: 1px solid #4a5568; /* gray-600 */
+            border-radius: 0.375rem; /* rounded-md */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); /* shadow-md */
+            z-index: 10;
+            width: 100%;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .multi-select-dropdown-option {
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            color: #e2e8f0; /* text-gray-200 */
+        }
+        .multi-select-dropdown-option:hover {
+            background-color: #4a5568; /* gray-600 */
+        }
+        /* Style for inputs in dark theme */
+        input[type="text"],
+        input[type="number"],
+        input[type="password"],
+        input[type="email"],
+        input[type="tel"],
+        select {
+            background-color: #2d3748; /* gray-800 */
+            color: #e2e8f0; /* text-gray-200 */
+            border-color: #4a5568; /* gray-600 */
+        }
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        input[type="password"]:focus,
+        input[type="email"]:focus,
+        input[type="tel"]:focus,
+        select:focus {
+            border-color: #667eea; /* indigo-500 */
+            box-shadow: 0 0 0 1px #667eea; /* ring-indigo-500 */
+        }
+        /* File input specific styling */
+        input[type="file"]::file-selector-button {
+            background-color: #667eea; /* violet-700 */
+            color: #ffffff;
+            border: 0;
+            border-radius: 9999px; /* rounded-full */
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem; /* text-sm */
+            font-weight: 600; /* font-semibold */
+            cursor: pointer;
+            transition: background-color 0.15s ease-in-out;
+        }
+        input[type="file"]::file-selector-button:hover {
+            background-color: #5a67d8; /* hover:violet-600 */
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 p-4 sm:p-6 lg:p-8">
+    <header class="bg-gray-800 rounded-lg shadow-lg p-4 mb-6 text-center">
+        <h1 class="text-4xl font-bold text-indigo-500">Duel Master App</h1>
+        <p class="text-gray-400 mt-2">Manage players, challenge opponents, and bet on live duels!</p>
+        <p class="text-sm text-gray-500 mt-1">Logged in as: <span id="loggedInUserIdDisplay" class="font-mono text-indigo-400 break-all">Not Logged In</span></p>
+        <p class="text-lg font-semibold text-gray-300 mt-2">Your Balance: <span id="userBalanceDisplay" class="text-green-400"></span> ₮</p>
+    </header>
+
+    <nav id="mainNav" class="bg-gray-800 rounded-lg shadow-lg p-2 mb-6 flex justify-center space-x-2 sm:space-x-4">
+        <!-- Navigation buttons will be dynamically added/hidden based on login state -->
+    </nav>
+
+    <main id="appContent" class="container mx-auto">
+        <!-- Content will be dynamically loaded here -->
+    </main>
+
+    <!-- Modal Structure (hidden by default) -->
+    <div id="modalOverlay" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-gray-800 rounded-lg shadow-xl p-6 max-w-lg w-full relative border border-gray-700">
+            <h3 id="modalTitle" class="text-xl font-bold mb-4 text-gray-100"></h3>
+            <button id="modalCloseBtn" class="absolute top-3 right-3 text-gray-400 hover:text-gray-200 text-2xl font-bold">
+                &times;
+            </button>
+            <div id="modalContent" class="text-gray-300"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- Global State and Utility Functions ---
+        let players = JSON.parse(localStorage.getItem('duelMasterPlayers')) || [];
+        let duelRequests = JSON.parse(localStorage.getItem('duelMasterRequests')) || [];
+        let activeDuels = JSON.parse(localStorage.getItem('duelMasterActiveDuels')) || [];
+        let bets = JSON.parse(localStorage.getItem('duelMasterBets')) || [];
+
+        // User Accounts (for login)
+        let userAccounts = JSON.parse(localStorage.getItem('duelMasterUserAccounts')) || [];
+        let loggedInUserId = localStorage.getItem('duelMasterLoggedInUserId');
+        let currentUserBalance = 0; // Will be updated on login
+
+        // Initialize admin accounts if they don't exist
+        const initialAdminAccounts = [
+            { id: 'Greed', password: '88912163', emailOrPhone: 'admin1@example.com', balance: 1000000, isAdmin: true },
+            { id: 'Pride', password: 'ErmuunAdmin', emailOrPhone: 'admin2@example.com', balance: 1000000, isAdmin: true },
+            { id: 'Lust', password: 'BilguunAdmin', emailOrPhone: 'admin3@example.com', balance: 1000000, isAdmin: true },
+        ];
+
+        if (userAccounts.length === 0) {
+            userAccounts = initialAdminAccounts;
+            localStorage.setItem('duelMasterUserAccounts', JSON.stringify(userAccounts));
+        }
+
+        // Special IDs management
+        const SILVER_ID_COST = 50000;
+        const GOLDEN_ID_COST = 100000;
+        const SPECIAL_ID_COST = 300000;
+
+        // Predefined "good looking lucky numbers" for Silver and Golden IDs
+        let silverIdsPool = [
+            '00001', '00010', '00100', '00111', '00200', '00222', '00300', '00333', '00400', '00444', '00500', '00555',
+            '01234', '04321', '12345', '54321', '10101', '20202', '30303', '40404', '50505', '60606', '70707', '80808', '90909',
+            '11223', '33445', '55667', '77889', '99001', '12121', '23232', '34343', '45454', '56565', '67676', '78787', '89898', '90909',
+            '11111', '22222', '33333', '44444', '55555', '66666', '77777', '88888', '99999'
+        ];
+        let goldenIdsPool = [
+            '1', '7', '8', '9', '10', '11', '22', '33', '44', '55', '66', '77', '88', '99', '100',
+            '111', '222', '333', '444', '555', '666', '777', '888', '999',
+            '1000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999',
+            '10000', '11111', '22222', '33333', '44444', '55555', '66666', '77777', '88888', '99999',
+            '123456', '654321', '123123', '321321', '789789', '987987', '1234567', '7654321' // Adding some longer ones for variety
+        ];
+
+        let usedSpecialIds = new Set(JSON.parse(localStorage.getItem('duelMasterUsedSpecialIds')) || []);
+
+        const getAvailableSilverIds = () => silverIdsPool.filter(id => !usedSpecialIds.has(id) && !players.some(p => p.id === id));
+        const getAvailableGoldenIds = () => goldenIdsPool.filter(id => !usedSpecialIds.has(id) && !players.some(p => p.id === id));
+
+        // Predefined game categories and their specific ranks
+        const gameCategories = [
+            'Mонгол Бөх', 'CS:GO', 'Mobile Legends: Bang Bang', 'Valorant', 'Dota 2',
+            'League of Legends', 'Fortnite', 'Apex Legends', 'Overwatch 2', 'Tekken 8',
+            'Street Fighter 6', 'FIFA 24', 'NBA 2K24', 'Chess', 'Poker'
+        ];
+
+        const gameRanksMap = {
+            'Mонгол Бөх': ['Начин', 'Заан', 'Гаруди', 'Арслан', 'Аварга'],
+            'CS:GO': ['Silver I', 'Silver II', 'Silver III', 'Silver IV', 'Silver Elite', 'Silver Elite Master',
+                      'Gold Nova I', 'Gold Nova II', 'Gold Nova III', 'Gold Nova Master',
+                      'Master Guardian I', 'Master Guardian II', 'Master Guardian Elite',
+                      'Distinguished Master Guardian', 'Legendary Eagle', 'Legendary Eagle Master',
+                      'Supreme Master First Class', 'Global Elite'],
+            'Mobile Legends: Bang Bang': ['Warrior', 'Elite', 'Master', 'Grandmaster', 'Epic', 'Legend', 'Mythic'],
+            // Default for other games will be a text input
+        };
+
+        let selectedDuel = null; // To hold the duel object when viewing stream
+
+        const saveState = () => {
+            localStorage.setItem('duelMasterPlayers', JSON.stringify(players));
+            localStorage.setItem('duelMasterRequests', JSON.stringify(duelRequests));
+            localStorage.setItem('duelMasterActiveDuels', JSON.stringify(activeDuels));
+            localStorage.setItem('duelMasterBets', JSON.stringify(bets));
+            localStorage.setItem('duelMasterUsedSpecialIds', JSON.stringify(Array.from(usedSpecialIds)));
+            localStorage.setItem('duelMasterUserAccounts', JSON.stringify(userAccounts));
+            localStorage.setItem('duelMasterLoggedInUserId', loggedInUserId || '');
+        };
+
+        // Generates a random 5-digit number for Normal ID
+        const generateNormalId = () => {
+            let id;
+            do {
+                id = Math.floor(10000 + Math.random() * 90000).toString(); // 10000 to 99999
+            } while (players.some(p => p.id === id) || userAccounts.some(u => u.id === id) || usedSpecialIds.has(id)); // Ensure unique across players and user accounts
+            return id;
+        };
+
+        // Generates a UUID for internal use where a truly unique string is needed
+        const generateUniqueId = () => crypto.randomUUID();
+
+        // --- Modal Functions ---
+        const showModal = (title, message) => {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalContent').textContent = message;
+            document.getElementById('modalOverlay').classList.remove('hidden');
+        };
+
+        const hideModal = () => {
+            document.getElementById('modalOverlay').classList.add('hidden');
+        };
+
+        // --- Login/Logout & User Management ---
+        const loginUser = (id, password) => {
+            const user = userAccounts.find(acc => acc.id === id && acc.password === password);
+            if (user) {
+                loggedInUserId = user.id;
+                currentUserBalance = user.balance;
+                saveState();
+                showModal('Login Successful', `Welcome, ${loggedInUserId}! Your balance: ${currentUserBalance.toLocaleString()} ₮`);
+                renderMainAppContent(); // Show main app after login
+            } else {
+                showModal('Login Failed', 'Invalid ID or password.');
+            }
+        };
+
+        const logoutUser = () => {
+            loggedInUserId = null;
+            currentUserBalance = 0;
+            saveState();
+            showModal('Logged Out', 'You have been logged out.');
+            renderLogin(); // Show login screen
+        };
+
+        const updateBalanceDisplay = () => {
+            const user = userAccounts.find(acc => acc.id === loggedInUserId);
+            if (user) {
+                currentUserBalance = user.balance;
+                document.getElementById('userBalanceDisplay').textContent = currentUserBalance.toLocaleString() + ' ₮';
+            } else {
+                document.getElementById('userBalanceDisplay').textContent = 'N/A';
+            }
+        };
+
+        // --- Tab Management ---
+        const appContentDiv = document.getElementById('appContent');
+        const mainNav = document.getElementById('mainNav');
+
+        const renderNavButtons = () => {
+            mainNav.innerHTML = ''; // Clear existing buttons
+            if (loggedInUserId) {
+                mainNav.innerHTML = `
+                    <button id="registerTabBtn" class="px-4 py-2 rounded-md font-medium transition duration-150 ease-in-out bg-indigo-600 text-white shadow-md hover:bg-indigo-700">
+                        Register Player
+                    </button>
+                    <button id="playersTabBtn" class="px-4 py-2 rounded-md font-medium transition duration-150 ease-in-out bg-gray-700 text-gray-300 hover:bg-gray-600">
+                        Player List
+                    </button>
+                    <button id="requestsTabBtn" class="px-4 py-2 rounded-md font-medium transition duration-150 ease-in-out bg-gray-700 text-gray-300 hover:bg-gray-600">
+                        Duel Requests
+                    </button>
+                    <button id="duelsTabBtn" class="px-4 py-2 rounded-md font-medium transition duration-150 ease-in-out bg-gray-700 text-gray-300 hover:bg-gray-600">
+                        Active Duels
+                    </button>
+                    <button id="logoutBtn" class="px-4 py-2 rounded-md font-medium transition duration-150 ease-in-out bg-red-600 text-white shadow-md hover:bg-red-700">
+                        Logout (${loggedInUserId})
+                    </button>
+                `;
+                document.getElementById('registerTabBtn').addEventListener('click', () => activateTab('register'));
+                document.getElementById('playersTabBtn').addEventListener('click', () => activateTab('players'));
+                document.getElementById('requestsTabBtn').addEventListener('click', () => activateTab('requests'));
+                document.getElementById('duelsTabBtn').addEventListener('click', () => activateTab('duels'));
+                document.getElementById('logoutBtn').addEventListener('click', logoutUser);
+            }
+        };
+
+        const activateTab = (tabName) => {
+            // Reset selected duel when changing tabs
+            selectedDuel = null;
+            renderContent(tabName);
+
+            // Update active button styling
+            const buttons = mainNav.querySelectorAll('button');
+            buttons.forEach(button => {
+                if (button.id.includes(tabName)) {
+                    button.classList.remove('bg-gray-700', 'text-gray-300', 'hover:bg-gray-600');
+                    button.classList.add('bg-indigo-600', 'text-white', 'shadow-md');
+                } else if (button.id !== 'logoutBtn') { // Don't change logout button style
+                    button.classList.remove('bg-indigo-600', 'text-white', 'shadow-md');
+                    button.classList.add('bg-gray-700', 'text-gray-300', 'hover:bg-gray-600');
+                }
+            });
+        };
+
+        // --- Render Login/Register Screens ---
+        const renderLogin = () => {
+            appContentDiv.innerHTML = `
+                <div class="bg-gray-800 p-8 rounded-lg shadow-lg w-full max-w-md mx-auto border border-gray-700">
+                    <h2 class="text-3xl font-bold text-gray-100 mb-6 text-center">Login</h2>
+                    <form id="loginForm" class="space-y-5">
+                        <div>
+                            <label for="loginId" class="block text-sm font-medium text-gray-300">Player ID</label>
+                            <input type="text" id="loginId" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                        </div>
+                        <div>
+                            <label for="loginPassword" class="block text-sm font-medium text-gray-300">Password</label>
+                            <input type="password" id="loginPassword" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                        </div>
+                        <button type="submit" class="w-full py-2.5 px-4 border border-transparent rounded-md shadow-sm text-lg font-semibold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
+                            Login
+                        </button>
+                    </form>
+                    <p class="mt-6 text-center text-gray-400">
+                        Don't have an account? <button id="switchToRegisterBtn" class="text-indigo-400 hover:text-indigo-300 font-medium">Register here</button>
+                    </p>
+                    <p class="mt-2 text-center text-gray-500 text-sm">
+                        Forgot password? (Contact admin for recovery)
+                    </p>
+                </div>
+            `;
+            document.getElementById('loggedInUserIdDisplay').textContent = 'Not Logged In';
+            document.getElementById('userBalanceDisplay').textContent = 'N/A';
+
+            document.getElementById('loginForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const id = document.getElementById('loginId').value;
+                const password = document.getElementById('loginPassword').value;
+                loginUser(id, password);
+            });
+
+            document.getElementById('switchToRegisterBtn').addEventListener('click', renderRegisterUser);
+            renderNavButtons(); // Clear nav buttons when not logged in
+        };
+
+        const renderRegisterUser = () => {
+            appContentDiv.innerHTML = `
+                <div class="bg-gray-800 p-8 rounded-lg shadow-lg w-full max-w-md mx-auto border border-gray-700">
+                    <h2 class="text-3xl font-bold text-gray-100 mb-6 text-center">Register New User</h2>
+                    <form id="registerUserForm" class="space-y-5">
+                        <div>
+                            <label for="registerId" class="block text-sm font-medium text-gray-300">Choose Your ID (e.g., username)</label>
+                            <input type="text" id="registerId" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                            <p id="registerIdError" class="text-red-400 text-xs mt-1 hidden">ID must be unique and cannot contain numbers if it's a Special ID.</p>
+                        </div>
+                        <div>
+                            <label for="registerPassword" class="block text-sm font-medium text-gray-300">Password</label>
+                            <input type="password" id="registerPassword" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                            <p id="passwordStrength" class="text-xs mt-1 text-gray-400">Password must be at least 8 characters long, contain uppercase, lowercase, number, and special character.</p>
+                        </div>
+                        <div>
+                            <label for="confirmPassword" class="block text-sm font-medium text-gray-300">Confirm Password</label>
+                            <input type="password" id="confirmPassword" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                            <p id="confirmPasswordError" class="text-red-400 text-xs mt-1 hidden">Passwords do not match.</p>
+                        </div>
+                        <div>
+                            <label for="emailOrPhone" class="block text-sm font-medium text-gray-300">Email or Phone Number (for recovery)</label>
+                            <input type="text" id="emailOrPhone" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                        </div>
+                        <button type="submit" class="w-full py-2.5 px-4 border border-transparent rounded-md shadow-sm text-lg font-semibold text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150 ease-in-out">
+                            Register User
+                        </button>
+                    </form>
+                    <p class="mt-6 text-center text-gray-400">
+                        Already have an account? <button id="switchToLoginBtn" class="text-indigo-400 hover:text-indigo-300 font-medium">Login here</button>
+                    </p>
+                </div>
+            `;
+            document.getElementById('loggedInUserIdDisplay').textContent = 'Not Logged In';
+            document.getElementById('userBalanceDisplay').textContent = 'N/A';
+
+            const registerIdInput = document.getElementById('registerId');
+            const registerIdError = document.getElementById('registerIdError');
+            const registerPasswordInput = document.getElementById('registerPassword');
+            const confirmPasswordInput = document.getElementById('confirmPassword');
+            const confirmPasswordError = document.getElementById('confirmPasswordError');
+            const passwordStrength = document.getElementById('passwordStrength');
+
+            const validatePassword = () => {
+                const pass = registerPasswordInput.value;
+                let strength = 0;
+                if (pass.length >= 8) strength++;
+                if (/[a-z]/.test(pass)) strength++;
+                if (/[A-Z]/.test(pass)) strength++;
+                if (/\d/.test(pass)) strength++;
+                if (/[^a-zA-Z0-9]/.test(pass)) strength++; // Special character
+
+                let msg = 'Password must be at least 8 characters long, contain uppercase, lowercase, number, and special character.';
+                let color = 'text-red-400';
+
+                if (strength === 5) { msg = 'Strong password!'; color = 'text-green-400'; }
+                else if (strength >= 3) { msg = 'Medium password.'; color = 'text-yellow-400'; }
+                else { msg = 'Weak password.'; color = 'text-red-400'; }
+
+                passwordStrength.textContent = msg;
+                passwordStrength.className = `text-xs mt-1 ${color}`;
+            };
+
+            registerPasswordInput.addEventListener('input', validatePassword);
+            confirmPasswordInput.addEventListener('input', () => {
+                if (registerPasswordInput.value !== confirmPasswordInput.value) {
+                    confirmPasswordError.classList.remove('hidden');
+                } else {
+                    confirmPasswordError.classList.add('hidden');
+                }
+            });
+
+            document.getElementById('registerUserForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const id = registerIdInput.value.trim();
+                const password = registerPasswordInput.value;
+                const confirmPassword = confirmPasswordInput.value;
+                const emailOrPhone = document.getElementById('emailOrPhone').value.trim();
+
+                // Basic validation
+                if (!id || !password || !emailOrPhone) {
+                    showModal('Registration Error', 'All fields are required.');
+                    return;
+                }
+
+                if (password !== confirmPassword) {
+                    showModal('Registration Error', 'Passwords do not match.');
+                    return;
+                }
+
+                // Check password strength (simplified for demo)
+                if (password.length < 8 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
+                     showModal('Registration Error', 'Password must be at least 8 characters long and contain uppercase, lowercase, and a number.');
+                     return;
+                }
+
+                // Check if ID is already taken (both user accounts and players)
+                if (userAccounts.some(acc => acc.id === id) || players.some(p => p.id === id)) {
+                    showModal('Registration Error', 'This ID is already taken. Please choose another.');
+                    return;
+                }
+
+                // Create new user account
+                const newUserAccount = {
+                    id: id,
+                    password: password,
+                    emailOrPhone: emailOrPhone,
+                    balance: 0, // New users start with 0 balance
+                    isAdmin: false,
+                };
+                userAccounts.push(newUserAccount);
+                saveState();
+                showModal('Registration Successful', `User "${id}" registered! You can now login.`);
+                renderLogin(); // Go back to login screen
+            });
+
+            document.getElementById('switchToLoginBtn').addEventListener('click', renderLogin);
+            renderNavButtons(); // Clear nav buttons when not logged in
+        };
+
+
+        // --- Render Main App Content (after login) ---
+        const renderMainAppContent = () => {
+            document.getElementById('loggedInUserIdDisplay').textContent = loggedInUserId;
+            updateBalanceDisplay();
+            renderNavButtons(); // Show nav buttons after login
+            activateTab('register'); // Default to register tab after login
+        };
+
+
+        // --- Render Functions for Each Section ---
+
+        const renderRegisterPlayer = () => {
+            const availableSilver = getAvailableSilverIds();
+            const availableGolden = getAvailableGoldenIds();
+
+            let silverIdOptionsHtml = availableSilver.map(id => `<option value="${id}">${parseInt(id)}</option>`).join(''); // Display without leading zeros
+            if (availableSilver.length === 0) {
+                silverIdOptionsHtml = '<option value="" disabled>No Silver IDs available</option>';
+            }
+
+            let goldenIdOptionsHtml = availableGolden.map(id => `<option value="${id}">${id}</option>`).join('');
+            if (availableGolden.length === 0) {
+                goldenIdOptionsHtml = '<option value="" disabled>No Golden IDs available</option>';
+            }
+
+            const gameOptionsHtml = gameCategories.map(game => `
+                <label class="multi-select-dropdown-option">
+                    <input type="checkbox" value="${game}" class="form-checkbox text-indigo-600 rounded-sm register-game-checkbox">
+                    <span class="ml-2">${game}</span>
+                </label>
+            `).join('');
+
+            appContentDiv.innerHTML = `
+                <div class="bg-gray-800 p-6 rounded-lg shadow-lg mb-6 w-full max-w-md mx-auto border border-gray-700">
+                    <h2 class="text-2xl font-bold text-gray-100 mb-4">Register New Player</h2>
+                    <form id="registrationForm" class="space-y-4">
+                        <div>
+                            <label for="name" class="block text-sm font-medium text-gray-300">Name</label>
+                            <input type="text" id="name" class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                        </div>
+                        <div>
+                            <label for="photoUpload" class="block text-sm font-medium text-gray-300">Photo</label>
+                            <input type="file" id="photoUpload" accept="image/*" class="mt-1 block w-full text-sm text-gray-400">
+                            <img id="photoPreview" src="https://placehold.co/100x100/AEC6CF/FFFFFF?text=Preview" alt="Photo Preview" class="mt-2 w-24 h-24 rounded-full object-cover object-center border border-gray-600">
+                            <p id="photoError" class="text-red-400 text-xs mt-1 hidden"></p>
+                        </div>
+                        <div>
+                            <label for="age" class="block text-sm font-medium text-gray-300">Age</label>
+                            <input type="number" id="age" class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                        </div>
+                        <div>
+                            <label for="weight" class="block text-sm font-medium text-gray-300">Weight (kg)</label>
+                            <input type="number" id="weight" class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300">Games Played</label>
+                            <div class="multi-select-dropdown mt-1">
+                                <button type="button" id="gamesSelectBtn" class="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm bg-gray-700 text-left focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-300">
+                                    Select Games
+                                </button>
+                                <div id="gamesOptions" class="multi-select-dropdown-options hidden">
+                                    ${gameOptionsHtml}
+                                </div>
+                            </div>
+                            <div id="selectedGamesDisplay" class="mt-2 text-sm text-gray-400"></div>
+                            <div id="gameRanksInputContainer" class="mt-4 space-y-3 p-3 border border-gray-700 rounded-md bg-gray-700">
+                                <!-- Dynamic rank inputs will be inserted here -->
+                            </div>
+                        </div>
+
+                        <div class="space-y-2">
+                            <label class="block text-sm font-medium text-gray-300">Player ID Type</label>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700">
+                                    <input type="radio" name="idType" value="normal" checked class="form-radio text-indigo-500" id="normalIdRadio">
+                                    <span class="ml-2 text-gray-300">Normal ID (Free)</span>
+                                </label>
+                                <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 ${availableSilver.length === 0 || currentUserBalance < SILVER_ID_COST ? 'opacity-50 cursor-not-allowed' : ''}">
+                                    <input type="radio" name="idType" value="silver" class="form-radio text-indigo-500" id="silverIdRadio" ${availableSilver.length === 0 || currentUserBalance < SILVER_ID_COST ? 'disabled' : ''}>
+                                    <span class="ml-2 text-gray-300">Silver ID (${SILVER_ID_COST.toLocaleString()} ₮)</span>
+                                </label>
+                                <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 ${availableGolden.length === 0 || currentUserBalance < GOLDEN_ID_COST ? 'opacity-50 cursor-not-allowed' : ''}">
+                                    <input type="radio" name="idType" value="golden" class="form-radio text-indigo-500" id="goldenIdRadio" ${availableGolden.length === 0 || currentUserBalance < GOLDEN_ID_COST ? 'disabled' : ''}>
+                                    <span class="ml-2 text-gray-300">Golden ID (${GOLDEN_ID_COST.toLocaleString()} ₮)</span>
+                                </label>
+                                <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 ${currentUserBalance < SPECIAL_ID_COST ? 'opacity-50 cursor-not-allowed' : ''}">
+                                    <input type="radio" name="idType" value="special" class="form-radio text-indigo-500" id="specialIdRadio" ${currentUserBalance < SPECIAL_ID_COST ? 'disabled' : ''}>
+                                    <span class="ml-2 text-gray-300">Special ID (${SPECIAL_ID_COST.toLocaleString()} ₮)</span>
+                                </label>
+                            </div>
+
+                            <div id="silverIdSelection" class="mt-2 hidden">
+                                <label for="silverId" class="block text-sm font-medium text-gray-300">Select Silver ID</label>
+                                <select id="silverId" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                    <option value="">-- Select --</option>
+                                    ${silverIdOptionsHtml}
+                                </select>
+                            </div>
+                            <div id="goldenIdSelection" class="mt-2 hidden">
+                                <label for="goldenId" class="block text-sm font-medium text-gray-300">Select Golden ID</label>
+                                <select id="goldenId" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                    <option value="">-- Select --</option>
+                                    ${goldenIdOptionsHtml}
+                                </select>
+                            </div>
+                            <div id="specialIdInput" class="mt-2 hidden">
+                                <label for="customSpecialId" class="block text-sm font-medium text-gray-300">Enter Custom Special ID (No numbers)</label>
+                                <input type="text" id="customSpecialId" placeholder="e.g., MYDUELID" class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
+                            Register Player
+                        </button>
+                    </form>
+                </div>
+            `;
+
+            const registrationForm = document.getElementById('registrationForm');
+            const photoUpload = document.getElementById('photoUpload');
+            const photoPreview = document.getElementById('photoPreview');
+            const photoError = document.getElementById('photoError');
+            const idTypeRadios = document.querySelectorAll('input[name="idType"]');
+            const silverIdSelectionDiv = document.getElementById('silverIdSelection');
+            const goldenIdSelectionDiv = document.getElementById('goldenIdSelection');
+            const specialIdInputDiv = document.getElementById('specialIdInput');
+            const silverIdSelect = document.getElementById('silverId');
+            const goldenIdSelect = document.getElementById('goldenId');
+            const customSpecialIdInput = document.getElementById('customSpecialId');
+
+            const gamesSelectBtn = document.getElementById('gamesSelectBtn');
+            const gamesOptionsDiv = document.getElementById('gamesOptions');
+            const registerGameCheckboxes = gamesOptionsDiv.querySelectorAll('.register-game-checkbox');
+            const selectedGamesDisplay = document.getElementById('selectedGamesDisplay');
+            const gameRanksInputContainer = document.getElementById('gameRanksInputContainer');
+
+            let uploadedPhotoDataUrl = ''; // To store the Data URL of the uploaded image
+            let selectedGames = []; // Stores only game names
+            let gameSpecificRanks = {}; // Stores { 'Game Name': 'Rank Value' }
+
+            const updateSelectedGamesDisplay = () => {
+                selectedGamesDisplay.textContent = selectedGames.length > 0 ? selectedGames.join(', ') : 'No games selected';
+                gamesSelectBtn.textContent = selectedGames.length > 0 ? `Selected (${selectedGames.length})` : 'Select Games';
+            };
+
+            const renderGameRankInputs = () => {
+                gameRanksInputContainer.innerHTML = ''; // Clear previous inputs
+                // Preserve existing ranks if re-rendering due to unchecking a game
+                const currentRanks = { ...gameSpecificRanks };
+                gameSpecificRanks = {};
+
+                if (selectedGames.length > 0) {
+                    const title = document.createElement('h4');
+                    title.className = 'text-md font-semibold text-gray-300 mb-2';
+                    title.textContent = 'Enter Ranks for Selected Games:';
+                    gameRanksInputContainer.appendChild(title);
+                }
+
+                selectedGames.forEach(game => {
+                    const gameRankType = gameRanksMap[game];
+                    let inputHtml = '';
+                    const existingRank = currentRanks[game] || ''; // Get existing rank if available
+
+                    if (gameRankType && Array.isArray(gameRankType)) { // Specific dropdown ranks
+                        const optionsHtml = gameRankType.map(rank =>
+                            `<option value="${rank}" ${existingRank === rank ? 'selected' : ''}>${rank}</option>`
+                        ).join('');
+                        inputHtml = `
+                            <label for="rank-${game.replace(/\s/g, '-')}" class="block text-sm font-medium text-gray-300">${game} Rank</label>
+                            <select id="rank-${game.replace(/\s/g, '-')}" data-game="${game}" class="game-rank-input mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                <option value="">-- Select Rank --</option>
+                                ${optionsHtml}
+                            </select>
+                        `;
+                    } else { // Generic text input
+                        inputHtml = `
+                            <label for="rank-${game.replace(/\s/g, '-')}" class="block text-sm font-medium text-gray-300">${game} Rank</label>
+                            <input type="text" id="rank-${game.replace(/\s/g, '-')}" data-game="${game}" placeholder="Enter rank for ${game}" value="${existingRank}" class="game-rank-input mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        `;
+                    }
+
+                    const div = document.createElement('div');
+                    div.innerHTML = inputHtml;
+                    gameRanksInputContainer.appendChild(div);
+
+                    // Re-populate gameSpecificRanks with existing or new values
+                    gameSpecificRanks[game] = existingRank;
+
+                    // Add event listener to capture rank changes
+                    const inputElement = document.getElementById(`rank-${game.replace(/\s/g, '-')}`);
+                    if (inputElement) {
+                        inputElement.addEventListener('input', (e) => {
+                            gameSpecificRanks[game] = e.target.value;
+                        });
+                        inputElement.addEventListener('change', (e) => { // For select elements
+                            gameSpecificRanks[game] = e.target.value;
+                        });
+                    }
+                });
+            };
+
+            gamesSelectBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent document click from closing immediately
+                gamesOptionsDiv.classList.toggle('hidden');
+            });
+
+            registerGameCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', () => {
+                    selectedGames = Array.from(registerGameCheckboxes)
+                        .filter(cb => cb.checked)
+                        .map(cb => cb.value);
+                    updateSelectedGamesDisplay();
+                    renderGameRankInputs(); // Re-render rank inputs based on selection
+                });
+            });
+
+            // Close dropdown if clicked outside
+            document.addEventListener('click', (e) => {
+                if (!gamesOptionsDiv.contains(e.target) && e.target !== gamesSelectBtn) {
+                    gamesOptionsDiv.classList.add('hidden');
+                }
+            });
+
+            photoUpload.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        uploadedPhotoDataUrl = event.target.result;
+                        photoPreview.src = uploadedPhotoDataUrl;
+                        // Check if localStorage can handle the size after loading
+                        try {
+                            localStorage.setItem('test_image_size', uploadedPhotoDataUrl);
+                            localStorage.removeItem('test_image_size'); // Clean up
+                            photoError.classList.add('hidden'); // No error
+                        } catch (e) {
+                            photoError.textContent = 'Warning: Image is very large and might not persist across sessions due to browser storage limits.';
+                            photoError.classList.remove('hidden');
+                            // The image will still be displayed for the current session
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    uploadedPhotoDataUrl = '';
+                    photoPreview.src = `https://placehold.co/100x100/AEC6CF/FFFFFF?text=Preview`;
+                    photoError.classList.add('hidden');
+                }
+            });
+
+            const toggleIdTypeVisibility = () => {
+                silverIdSelectionDiv.classList.add('hidden');
+                goldenIdSelectionDiv.classList.add('hidden');
+                specialIdInputDiv.classList.add('hidden');
+
+                const selectedIdType = document.querySelector('input[name="idType"]:checked').value;
+                if (selectedIdType === 'silver') {
+                    silverIdSelectionDiv.classList.remove('hidden');
+                } else if (selectedIdType === 'golden') {
+                    goldenIdSelectionDiv.classList.remove('hidden');
+                } else if (selectedIdType === 'special') {
+                    specialIdInputDiv.classList.remove('hidden');
+                }
+            };
+
+            idTypeRadios.forEach(radio => radio.addEventListener('change', toggleIdTypeVisibility));
+            toggleIdTypeVisibility(); // Initial call to set correct visibility
+
+            registrationForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const name = document.getElementById('name').value;
+                const age = document.getElementById('age').value;
+                const weight = document.getElementById('weight').value;
+                const idType = document.querySelector('input[name="idType"]:checked').value;
+                let playerId;
+                let cost = 0;
+
+                if (!name || !age || !weight) {
+                    showModal('Registration Error', 'Name, Age, and Weight are required.');
+                    return;
+                }
+                if (selectedGames.length === 0) {
+                    showModal('Registration Error', 'Please select at least one game played.');
+                    return;
+                }
+
+                // Validate game-specific ranks
+                const playerGamesWithRanks = [];
+                for (const game of selectedGames) {
+                    const gameRank = gameSpecificRanks[game] || '';
+                    if (!gameRank.trim()) {
+                        showModal('Registration Error', `Please enter a rank for "${game}".`);
+                        return;
+                    }
+                    playerGamesWithRanks.push({ name: game, rank: gameRank.trim() });
+                }
+
+                // Determine Player ID and Cost
+                if (idType === 'normal') {
+                    playerId = generateNormalId(); // Use new normal ID generator
+                    cost = 0;
+                } else if (idType === 'silver') {
+                    const selectedSilverId = silverIdSelect.value;
+                    if (!selectedSilverId) {
+                        showModal('Registration Error', 'Please select a Silver ID.');
+                        return;
+                    }
+                    if (players.some(p => p.id === selectedSilverId) || userAccounts.some(u => u.id === selectedSilverId) || usedSpecialIds.has(selectedSilverId)) {
+                        showModal('Registration Error', 'Selected Silver ID is already taken.');
+                        return;
+                    }
+                    playerId = selectedSilverId;
+                    cost = SILVER_ID_COST;
+                } else if (idType === 'golden') {
+                    const selectedGoldenId = goldenIdSelect.value;
+                    if (!selectedGoldenId) {
+                        showModal('Registration Error', 'Please select a Golden ID.');
+                        return;
+                    }
+                    if (players.some(p => p.id === selectedGoldenId) || userAccounts.some(u => u.id === selectedGoldenId) || usedSpecialIds.has(selectedGoldenId)) {
+                        showModal('Registration Error', 'Selected Golden ID is already taken.');
+                        return;
+                    }
+                    playerId = selectedGoldenId;
+                    cost = GOLDEN_ID_COST;
+                } else if (idType === 'special') {
+                    const customId = customSpecialIdInput.value.trim();
+                    if (!customId) {
+                        showModal('Registration Error', 'Please enter a custom Special ID.');
+                        return;
+                    }
+                    // Validate: Special ID cannot contain numbers
+                    if (/\d/.test(customId)) {
+                        showModal('Registration Error', 'Special ID cannot contain numbers. Please use only letters, hyphens, or other non-numeric characters.');
+                        return;
+                    }
+                    if (players.some(p => p.id === customId) || userAccounts.some(u => u.id === customId) || usedSpecialIds.has(customId)) {
+                        showModal('Registration Error', 'This custom Special ID is already taken. Please choose another.');
+                        return;
+                    }
+                    playerId = customId;
+                    cost = SPECIAL_ID_COST;
+                }
+
+                // Check balance for paid IDs
+                if (cost > 0 && currentUserBalance < cost) {
+                    showModal('Payment Error', `Insufficient balance. You need ${cost.toLocaleString()} ₮ but have ${currentUserBalance.toLocaleString()} ₮.`);
+                    return;
+                }
+
+                // Deduct cost from current user's balance
+                const currentUserAccount = userAccounts.find(acc => acc.id === loggedInUserId);
+                if (currentUserAccount) {
+                    currentUserAccount.balance -= cost;
+                    currentUserBalance = currentUserAccount.balance; // Update displayed balance
+                }
+
+                // Mark ID as used if it's a special ID
+                if (idType !== 'normal') {
+                    usedSpecialIds.add(playerId);
+                }
+
+                const finalPhotoUrl = uploadedPhotoDataUrl || `https://placehold.co/100x100/AEC6CF/FFFFFF?text=${name.charAt(0)}`;
+
+                const newPlayer = {
+                    id: playerId, // Use the chosen ID
+                    name,
+                    age: parseInt(age),
+                    weight: parseInt(weight),
+                    photoUrl: finalPhotoUrl,
+                    status: 'available',
+                    registeredBy: loggedInUserId, // Link to logged-in user
+                    games: playerGamesWithRanks // Store games with their specific ranks
+                };
+
+                players.push(newPlayer);
+                saveState();
+                showModal('Registration Status', `Player "${name}" registered successfully with ID "${playerId}"! Cost: ${cost.toLocaleString()} ₮. Your new balance: ${currentUserBalance.toLocaleString()} ₮.`);
+                // Clear form and reset photo preview
+                registrationForm.reset();
+                uploadedPhotoDataUrl = '';
+                photoPreview.src = `https://placehold.co/100x100/AEC6CF/FFFFFF?text=Preview`;
+                photoError.classList.add('hidden');
+                selectedGames = []; // Reset selected games
+                gameSpecificRanks = {}; // Reset game specific ranks
+                updateSelectedGamesDisplay();
+                renderGameRankInputs(); // Clear dynamic rank inputs
+                toggleIdTypeVisibility(); // Hide special ID dropdown
+                activateTab('players'); // Go to player list after registration
+            });
+            updateSelectedGamesDisplay(); // Initial display for games
+            renderGameRankInputs(); // Initial render for game ranks (should be empty)
+        };
+
+        const renderPlayerList = () => {
+            // Filter criteria state
+            let filterCriteria = {
+                idSearch: '',
+                nameSearch: '',
+                minAge: '', maxAge: '',
+                minWeight: '', maxWeight: '',
+                selectedGames: [],
+                gameSpecificRankFilters: {} // { 'Game Name': 'Selected Rank' } for dropdowns, or text for others
+            };
+            let showAdvancedFilters = false; // State for advanced filter visibility
+
+            const applyFilters = () => {
+                let filteredPlayers = players;
+
+                // Filter by ID (always active)
+                if (filterCriteria.idSearch) {
+                    const searchTerm = filterCriteria.idSearch.toLowerCase();
+                    filteredPlayers = filteredPlayers.filter(player => {
+                        // Direct match
+                        if (player.id.toLowerCase().includes(searchTerm)) {
+                            return true;
+                        }
+                        // For Silver IDs (5-digit numbers, might be searched without leading zeros)
+                        if (player.id.length === 5 && !isNaN(player.id) && searchTerm.length < 5) {
+                            const paddedSearchTerm = searchTerm.padStart(5, '0');
+                            if (player.id.includes(paddedSearchTerm)) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    });
+                }
+
+                // Apply advanced filters only if they are visible
+                if (showAdvancedFilters) {
+                    // Filter by Name
+                    if (filterCriteria.nameSearch) {
+                        filteredPlayers = filteredPlayers.filter(player =>
+                            player.name.toLowerCase().includes(filterCriteria.nameSearch.toLowerCase())
+                        );
+                    }
+
+                    // Filter by Age
+                    if (filterCriteria.minAge) {
+                        filteredPlayers = filteredPlayers.filter(player => player.age >= parseInt(filterCriteria.minAge));
+                    }
+                    if (filterCriteria.maxAge) {
+                        filteredPlayers = filteredPlayers.filter(player => player.age <= parseInt(filterCriteria.maxAge));
+                    }
+
+                    // Filter by Weight
+                    if (filterCriteria.minWeight) {
+                        filteredPlayers = filteredPlayers.filter(player => player.weight >= parseInt(filterCriteria.minWeight));
+                    }
+                    if (filterCriteria.maxWeight) {
+                        filteredPlayers = filteredPlayers.filter(player => player.weight <= parseInt(filterCriteria.maxWeight));
+                    }
+
+                    // Filter by Games Played (match any of the selected games)
+                    if (filterCriteria.selectedGames.length > 0) {
+                        filteredPlayers = filteredPlayers.filter(player =>
+                            player.games && player.games.some(gameObj => filterCriteria.selectedGames.includes(gameObj.name))
+                        );
+                    }
+
+                    // Filter by Game Specific Ranks
+                    for (const gameName in filterCriteria.gameSpecificRankFilters) {
+                        const selectedRank = filterCriteria.gameSpecificRankFilters[gameName];
+                        if (selectedRank) {
+                            filteredPlayers = filteredPlayers.filter(player =>
+                                player.games && player.games.some(gameObj =>
+                                    gameObj.name === gameName && gameObj.rank.toLowerCase().includes(selectedRank.toLowerCase())
+                                )
+                            );
+                        }
+                    }
+                }
+
+                renderPlayerCards(filteredPlayers);
+            };
+
+            const renderPlayerCards = (filteredPlayers) => {
+                let playersHtml = '';
+                if (filteredPlayers.length === 0) {
+                    playersHtml = '<p class="col-span-full text-center text-gray-400">No players found matching your criteria.</p>';
+                } else {
+                    filteredPlayers.forEach(player => {
+                        const gamesAndRanksHtml = player.games && player.games.length > 0
+                            ? player.games.map(game => `<li>${game.name}: ${game.rank}</li>`).join('')
+                            : '<li>N/A</li>';
+
+                        // Display Silver IDs without leading zeros for readability
+                        const displayedPlayerId = (player.id.length === 5 && !isNaN(player.id) && player.id.startsWith('0'))
+                            ? parseInt(player.id).toString()
+                            : player.id;
+
+                        playersHtml += `
+                            <div class="flex items-center bg-gray-700 p-4 rounded-lg shadow-md border border-gray-600">
+                                <img src="${player.photoUrl}" onerror="this.onerror=null;this.src='https://placehold.co/100x100/CCCCCC/FFFFFF?text=Error';" alt="${player.name}" class="w-20 h-20 rounded-full object-cover object-center mr-4" />
+                                <div class="flex-grow">
+                                    <h3 class="text-lg font-semibold text-gray-100">${player.name}</h3>
+                                    <p class="text-xs text-gray-400">ID: ${displayedPlayerId}</p>
+                                    <div class="text-sm text-gray-300">
+                                        <p>Age: ${player.age}</p>
+                                        <p>Weight: ${player.weight} kg</p>
+                                        <p class="font-semibold mt-1">Game Ranks:</p>
+                                        <ul class="list-disc list-inside ml-2 text-xs text-gray-400">
+                                            ${gamesAndRanksHtml}
+                                        </ul>
+                                    </div>
+                                </div>
+                                <button data-player-id="${player.id}" class="send-duel-btn ml-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-150 ease-in-out text-sm">
+                                    Send Duel Request
+                                </button>
+                            </div>
+                        `;
+                    });
+                }
+                document.getElementById('playerCardsContainer').innerHTML = playersHtml;
+
+                document.querySelectorAll('.send-duel-btn').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const recipientPlayerId = e.target.dataset.playerId;
+                        handleSendDuelRequest(recipientPlayerId);
+                    });
+                });
+            };
+
+            const gameFilterOptionsHtml = gameCategories.map(game => `
+                <label class="multi-select-dropdown-option">
+                    <input type="checkbox" value="${game}" class="form-checkbox text-indigo-600 rounded-sm filter-game-checkbox">
+                    <span class="ml-2">${game}</span>
+                </label>
+            `).join('');
+
+            const gameSpecificRankFiltersHtml = gameCategories.map(game => {
+                const ranks = gameRanksMap[game];
+                if (ranks && Array.isArray(ranks)) {
+                    const options = ranks.map(rank => `<option value="${rank}">${rank}</option>`).join('');
+                    return `
+                        <div>
+                            <label for="filter-rank-${game.replace(/\s/g, '-')}" class="block text-sm font-medium text-gray-300">${game} Rank</label>
+                            <select id="filter-rank-${game.replace(/\s/g, '-')}" data-game="${game}" class="filter-game-rank-select mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                <option value="">-- Any Rank --</option>
+                                ${options}
+                            </select>
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div>
+                            <label for="filter-rank-${game.replace(/\s/g, '-')}" class="block text-sm font-medium text-gray-300">${game} Rank</label>
+                            <input type="text" id="filter-rank-${game.replace(/\s/g, '-')}" data-game="${game}" placeholder="Search rank for ${game}" class="filter-game-rank-input mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                    `;
+                }
+            }).join('');
+
+
+            appContentDiv.innerHTML = `
+                <div class="bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-6xl mx-auto border border-gray-700">
+                    <h2 class="text-2xl font-bold text-gray-100 mb-4">Available Players</h2>
+
+                    <!-- Search by ID (always visible) -->
+                    <div class="mb-4 p-4 border border-gray-700 rounded-lg bg-gray-700">
+                        <label for="searchById" class="block text-sm font-medium text-gray-300">Search by ID</label>
+                        <input type="text" id="searchById" placeholder="Enter Player ID" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+
+                    <!-- Advanced Filter Toggle Button -->
+                    <button id="toggleAdvancedFiltersBtn" class="w-full py-2 px-4 mb-6 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gray-600 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition duration-150 ease-in-out">
+                        Show Advanced Filters
+                    </button>
+
+                    <!-- Advanced Filter Section (initially hidden) -->
+                    <div id="advancedFilterSection" class="mb-6 p-4 border border-gray-700 rounded-lg bg-gray-700 hidden">
+                        <h3 class="text-xl font-semibold text-gray-100 mb-3">Advanced Filters</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div>
+                                <label for="searchByName" class="block text-sm font-medium text-gray-300">Search by Name</label>
+                                <input type="text" id="searchByName" placeholder="Enter Player Name" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label for="minAge" class="block text-sm font-medium text-gray-300">Min Age</label>
+                                    <input type="number" id="minAge" placeholder="Min" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                </div>
+                                <div>
+                                    <label for="maxAge" class="block text-sm font-medium text-gray-300">Max Age</label>
+                                    <input type="number" id="maxAge" placeholder="Max" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label for="minWeight" class="block text-sm font-medium text-gray-300">Min Weight (kg)</label>
+                                    <input type="number" id="minWeight" placeholder="Min" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                </div>
+                                <div>
+                                    <label for="maxWeight" class="block text-sm font-medium text-gray-300">Max Weight (kg)</label>
+                                    <input type="number" id="maxWeight" placeholder="Max" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300">Games Played</label>
+                                <div class="multi-select-dropdown mt-1">
+                                    <button type="button" id="filterGamesSelectBtn" class="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm bg-gray-800 text-left focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-300">
+                                        Filter by Games
+                                    </button>
+                                    <div id="filterGamesOptions" class="multi-select-dropdown-options hidden">
+                                        ${gameFilterOptionsHtml}
+                                    </div>
+                                </div>
+                                <div id="filterSelectedGamesDisplay" class="mt-2 text-sm text-gray-400"></div>
+                            </div>
+                            ${gameSpecificRankFiltersHtml} <!-- Dynamic game-specific rank filters -->
+                        </div>
+                        <button id="resetFiltersBtn" class="mt-4 w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gray-500 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition duration-150 ease-in-out">
+                            Reset Filters
+                        </button>
+                    </div>
+
+                    <!-- Player Cards Container -->
+                    <div id="playerCardsContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <!-- Player cards will be rendered here -->
+                    </div>
+                </div>
+            `;
+
+            // Get filter elements
+            const searchByIdInput = document.getElementById('searchById');
+            const toggleAdvancedFiltersBtn = document.getElementById('toggleAdvancedFiltersBtn');
+            const advancedFilterSection = document.getElementById('advancedFilterSection');
+            const searchByNameInput = document.getElementById('searchByName');
+            const minAgeInput = document.getElementById('minAge');
+            const maxAgeInput = document.getElementById('maxAge');
+            const minWeightInput = document.getElementById('minWeight');
+            const maxWeightInput = document.getElementById('maxWeight');
+            const filterGamesSelectBtn = document.getElementById('filterGamesSelectBtn');
+            const filterGamesOptionsDiv = document.getElementById('filterGamesOptions');
+            const filterGameCheckboxes = filterGamesOptionsDiv.querySelectorAll('.filter-game-checkbox');
+            const filterSelectedGamesDisplay = document.getElementById('filterSelectedGamesDisplay');
+            const resetFiltersBtn = document.getElementById('resetFiltersBtn');
+            const filterGameRankInputs = document.querySelectorAll('.filter-game-rank-input, .filter-game-rank-select');
+
+
+            const updateFilterSelectedGamesDisplay = () => {
+                filterSelectedGamesDisplay.textContent = filterCriteria.selectedGames.length > 0 ? filterCriteria.selectedGames.join(', ') : 'No games selected';
+                filterGamesSelectBtn.textContent = filterCriteria.selectedGames.length > 0 ? `Filtered (${filterCriteria.selectedGames.length})` : 'Filter by Games';
+            };
+
+            // Event listeners for filter inputs
+            searchByIdInput.addEventListener('input', (e) => { filterCriteria.idSearch = e.target.value; applyFilters(); });
+            searchByNameInput.addEventListener('input', (e) => { filterCriteria.nameSearch = e.target.value; applyFilters(); });
+            minAgeInput.addEventListener('input', (e) => { filterCriteria.minAge = e.target.value; applyFilters(); });
+            maxAgeInput.addEventListener('input', (e) => { filterCriteria.maxAge = e.target.value; applyFilters(); });
+            minWeightInput.addEventListener('input', (e) => { filterCriteria.minWeight = e.target.value; applyFilters(); });
+            maxWeightInput.addEventListener('input', (e) => { filterCriteria.maxWeight = e.target.value; applyFilters(); });
+
+            filterGamesSelectBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                filterGamesOptionsDiv.classList.toggle('hidden');
+            });
+
+            filterGameCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', () => {
+                    filterCriteria.selectedGames = Array.from(filterGameCheckboxes)
+                        .filter(cb => cb.checked)
+                        .map(cb => cb.value);
+                    updateFilterSelectedGamesDisplay();
+                    applyFilters();
+                });
+            });
+
+            filterGameRankInputs.forEach(input => {
+                input.addEventListener('input', (e) => { // For text inputs
+                    const game = e.target.dataset.game;
+                    filterCriteria.gameSpecificRankFilters[game] = e.target.value;
+                    applyFilters();
+                });
+                 input.addEventListener('change', (e) => { // For select elements
+                    const game = e.target.dataset.game;
+                    filterCriteria.gameSpecificRankFilters[game] = e.target.value;
+                    applyFilters();
+                });
+            });
+
+
+            document.addEventListener('click', (e) => {
+                if (!filterGamesOptionsDiv.contains(e.target) && e.target !== filterGamesSelectBtn) {
+                    filterGamesOptionsDiv.classList.add('hidden');
+                }
+            });
+
+            resetFiltersBtn.addEventListener('click', () => {
+                filterCriteria = {
+                    idSearch: '', nameSearch: '',
+                    minAge: '', maxAge: '',
+                    minWeight: '', maxWeight: '',
+                    selectedGames: [],
+                    gameSpecificRankFilters: {}
+                };
+                searchByIdInput.value = '';
+                searchByNameInput.value = '';
+                minAgeInput.value = ''; maxAgeInput.value = '';
+                minWeightInput.value = ''; maxWeightInput.value = '';
+                filterGameCheckboxes.forEach(cb => cb.checked = false);
+                filterGameRankInputs.forEach(input => input.value = ''); // Clear game rank filters
+                updateFilterSelectedGamesDisplay();
+                applyFilters();
+            });
+
+            // Toggle Advanced Filters visibility
+            toggleAdvancedFiltersBtn.addEventListener('click', () => {
+                showAdvancedFilters = !showAdvancedFilters;
+                advancedFilterSection.classList.toggle('hidden', !showAdvancedFilters);
+                toggleAdvancedFiltersBtn.textContent = showAdvancedFilters ? 'Hide Advanced Filters' : 'Show Advanced Filters';
+                applyFilters(); // Re-apply filters when visibility changes
+            });
+
+
+            applyFilters(); // Initial render of players with no filters
+            updateFilterSelectedGamesDisplay(); // Initial display for filter games
+        };
+
+        const handleSendDuelRequest = (recipientPlayerId) => {
+            const recipientPlayer = players.find(p => p.id === recipientPlayerId);
+            if (!recipientPlayer) {
+                showModal('Error', 'Recipient player not found.');
+                return;
+            }
+
+            const currentPlayer = players.find(p => p.registeredBy === loggedInUserId);
+            if (currentPlayer && currentPlayer.id === recipientPlayerId) {
+                showModal('Error', 'You cannot send a duel request to yourself.');
+                return;
+            }
+
+            const existingRequest = duelRequests.find(req =>
+                req.requesterId === (currentPlayer ? currentPlayer.id : 'unknown') &&
+                req.recipientId === recipientPlayerId &&
+                req.status === 'pending'
+            );
+
+            if (existingRequest) {
+                showModal('Error', 'A pending duel request already exists for this player.');
+                return;
+            }
+
+            const newRequest = {
+                id: generateUniqueId(),
+                requesterId: currentPlayer ? currentPlayer.id : 'unknown',
+                recipientId: recipientPlayerId,
+                status: 'pending',
+                timestamp: new Date().toISOString(),
+            };
+
+            duelRequests.push(newRequest);
+            saveState();
+            showModal('Duel Request Status', `Duel request sent to ${recipientPlayer.name}!`);
+            activateTab('requests'); // Go to requests tab
+        };
+
+        const renderDuelRequests = () => {
+            const currentPlayer = players.find(p => p.registeredBy === loggedInUserId);
+            const incomingRequests = duelRequests.filter(req =>
+                currentPlayer && req.recipientId === currentPlayer.id && req.status === 'pending'
+            );
+
+            let requestsHtml = '';
+            if (incomingRequests.length === 0) {
+                requestsHtml = '<p class="text-center text-gray-400">No pending duel requests.</p>';
+            } else {
+                incomingRequests.forEach(request => {
+                    const requesterPlayer = players.find(p => p.id === request.requesterId);
+                    requestsHtml += `
+                        <div class="flex items-center justify-between bg-gray-700 p-4 rounded-lg shadow-md border border-gray-600">
+                            <div>
+                                <p class="text-lg font-semibold text-gray-100">
+                                    ${requesterPlayer?.name || 'Unknown Player'} wants to duel!
+                                </p>
+                                <p class="text-sm text-gray-400">Status: ${request.status}</p>
+                            </div>
+                            <div class="flex space-x-2">
+                                <button data-request-id="${request.id}" class="accept-duel-btn px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition duration-150 ease-in-out text-sm">
+                                    Accept
+                                </button>
+                                <button data-request-id="${request.id}" class="decline-duel-btn px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition duration-150 ease-in-out text-sm">
+                                    Decline
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            appContentDiv.innerHTML = `
+                <div class="bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-4xl mx-auto mb-6 border border-gray-700">
+                    <h2 class="text-2xl font-bold text-gray-100 mb-4">Incoming Duel Requests</h2>
+                    <div class="space-y-4">
+                        ${requestsHtml}
+                    </div>
+                </div>
+            `;
+
+            document.querySelectorAll('.accept-duel-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const requestId = e.target.dataset.requestId;
+                    handleAcceptDuel(requestId);
+                });
+            });
+
+            document.querySelectorAll('.decline-duel-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const requestId = e.target.dataset.requestId;
+                    handleDeclineDuel(requestId);
+                });
+            });
+        };
+
+        const handleAcceptDuel = (requestId) => {
+            const requestIndex = duelRequests.findIndex(req => req.id === requestId);
+            if (requestIndex > -1) {
+                duelRequests[requestIndex].status = 'accepted';
+
+                const acceptedRequest = duelRequests[requestIndex];
+                const newDuel = {
+                    id: generateUniqueId(),
+                    player1Id: acceptedRequest.requesterId,
+                    player2Id: acceptedRequest.recipientId,
+                    status: 'ongoing',
+                    timestamp: new Date().toISOString(),
+                };
+                activeDuels.push(newDuel);
+                saveState();
+                showModal('Duel Request Action', 'Duel accepted and moved to active duels!');
+                activateTab('duels'); // Go to active duels
+            }
+        };
+
+        const handleDeclineDuel = (requestId) => {
+            const requestIndex = duelRequests.findIndex(req => req.id === requestId);
+            if (requestIndex > -1) {
+                duelRequests[requestIndex].status = 'declined';
+                saveState();
+                showModal('Duel Request Action', 'Duel declined.');
+                renderDuelRequests(); // Re-render to update the list
+            }
+        };
+
+        const renderActiveDuels = () => {
+            const ongoingDuels = activeDuels.filter(duel => duel.status === 'ongoing');
+            let duelsHtml = '';
+
+            if (ongoingDuels.length === 0) {
+                duelsHtml = '<p class="text-center text-gray-400">No duels currently active.</p>';
+            } else {
+                ongoingDuels.forEach(duel => {
+                    const player1 = players.find(p => p.id === duel.player1Id);
+                    const player2 = players.find(p => p.id === duel.player2Id);
+                    // Display Silver IDs without leading zeros for readability in duel cards
+                    const displayedPlayer1Id = (player1?.id.length === 5 && !isNaN(player1?.id) && player1?.id.startsWith('0'))
+                        ? parseInt(player1.id).toString()
+                        : player1?.id;
+                    const displayedPlayer2Id = (player2?.id.length === 5 && !isNaN(player2?.id) && player2?.id.startsWith('0'))
+                        ? parseInt(player2.id).toString()
+                        : player2?.id;
+
+                    duelsHtml += `
+                        <div class="bg-gradient-to-br from-purple-800 to-indigo-800 p-4 rounded-lg shadow-md border border-purple-700">
+                            <div class="flex items-center justify-center space-x-4 mb-3">
+                                <img src="${player1?.photoUrl || 'https://placehold.co/60x60/CCCCCC/FFFFFF?text=P1'}" onerror="this.onerror=null;this.src='https://placehold.co/60x60/CCCCCC/FFFFFF?text=Error';" alt="Player 1" class="w-16 h-16 rounded-full object-cover object-center border-2 border-purple-500" />
+                                <span class="text-xl font-bold text-purple-300">VS</span>
+                                <img src="${player2?.photoUrl || 'https://placehold.co/60x60/CCCCCC/FFFFFF?text=P2'}" onerror="this.onerror=null;this.src='https://placehold.co/60x60/CCCCCC/FFFFFF?text=Error';" alt="Player 2" class="w-16 h-16 rounded-full object-cover object-center border-2 border-purple-500" />
+                            </div>
+                            <p class="text-center text-lg font-semibold text-gray-100 mb-2">
+                                ${player1?.name || 'Player 1'} (ID: ${displayedPlayer1Id}) vs ${player2?.name || 'Player 2'} (ID: ${displayedPlayer2Id})
+                            </p>
+                            <p class="text-center text-sm text-gray-400 mb-3">Status: <span class="font-medium text-green-400">${duel.status.toUpperCase()}</span></p>
+                            <button data-duel-id="${duel.id}" class="view-stream-btn w-full py-2 px-4 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition duration-150 ease-in-out font-medium shadow-lg">
+                                View Stream & Bet
+                            </button>
+                        </div>
+                    `;
+                });
+            }
+
+            appContentDiv.innerHTML = `
+                <div class="bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-4xl mx-auto mb-6 border border-gray-700">
+                    <h2 class="text-2xl font-bold text-gray-100 mb-4">Active Duels</h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        ${duelsHtml}
+                    </div>
+                </div>
+            `;
+
+            document.querySelectorAll('.view-stream-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const duelId = e.target.dataset.duelId;
+                    selectedDuel = activeDuels.find(d => d.id === duelId);
+                    if (selectedDuel) {
+                        renderDuelStreamAndBetting(selectedDuel);
+                    }
+                });
+            });
+        };
+
+        const renderDuelStreamAndBetting = (duel) => {
+            const player1 = players.find(p => p.id === duel.player1Id);
+            const player2 = players.find(p => p.id === duel.player2Id);
+
+            const currentDuelBets = bets.filter(bet => bet.duelId === duel.id);
+            const totalBetsPlayer1 = currentDuelBets.filter(bet => bet.betOnPlayerId === duel.player1Id).reduce((sum, bet) => sum + bet.betAmount, 0);
+            const totalBetsPlayer2 = currentDuelBets.filter(bet => bet.betOnPlayerId === duel.player2Id).reduce((sum, bet) => sum + bet.betAmount, 0);
+
+            let betsListHtml = '';
+            if (currentDuelBets.length === 0) {
+                betsListHtml = '<p class="text-center text-gray-400 text-sm">No bets placed yet.</p>';
+            } else {
+                currentDuelBets.forEach(bet => {
+                    const betOnPlayer = players.find(p => p.id === bet.betOnPlayerId);
+                    betsListHtml += `
+                        <li class="text-sm text-gray-300 border-b border-gray-700 pb-1 last:border-b-0">
+                            User <span class="font-semibold">${bet.bettorId.substring(0, 6)}...</span> bet <span class="font-semibold">${bet.betAmount.toLocaleString()} ₮</span> on <span class="font-semibold">${betOnPlayer?.name || 'Unknown'}</span>
+                        </li>
+                    `;
+                });
+            }
+
+            appContentDiv.innerHTML = `
+                <div class="bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-5xl mx-auto border border-gray-700">
+                    <h2 class="text-2xl font-bold text-gray-100 mb-4">
+                        Live Duel: ${player1?.name || 'Player 1'} vs ${player2?.name || 'Player 2'}
+                    </h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Live Stream Section -->
+                        <div class="md:col-span-1">
+                            <h3 class="text-xl font-semibold text-gray-300 mb-3">Live Stream (Simulated)</h3>
+                            <div class="relative w-full pb-[56.25%] rounded-lg overflow-hidden shadow-lg bg-gray-900">
+                                <iframe
+                                    class="absolute top-0 left-0 w-full h-full"
+                                    src="https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1&mute=1"
+                                    title="Simulated Live Stream"
+                                    frameborder="0"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowfullscreen
+                                ></iframe>
+                            </div>
+                            <p class="text-sm text-gray-400 mt-2">
+                                *This is a simulated live stream. In a real application, this would be a live video feed.
+                            </p>
+                        </div>
+
+                        <!-- Betting Section -->
+                        <div class="md:col-span-1">
+                            <h3 class="text-xl font-semibold text-gray-300 mb-3">Place Your Bets!</h3>
+                            <div class="bg-gray-700 p-4 rounded-lg shadow-inner mb-4 border border-gray-600">
+                                <div class="mb-4">
+                                    <label for="betPlayer" class="block text-sm font-medium text-gray-300 mb-1">Bet on:</label>
+                                    <select id="betPlayer" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                        <option value="">Select a player</option>
+                                        <option value="${duel.player1Id}">${player1?.name}</option>
+                                        <option value="${duel.player2Id}">${player2?.name}</option>
+                                    </select>
+                                </div>
+                                <div class="mb-4">
+                                    <label for="betAmount" class="block text-sm font-medium text-gray-300 mb-1">Bet Amount (Virtual Currency)</label>
+                                    <input type="number" id="betAmount" value="10" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" min="1" required>
+                                </div>
+                                <button id="placeBetBtn" class="w-full py-2 px-4 bg-green-600 text-white rounded-md hover:bg-green-700 transition duration-150 ease-in-out font-medium shadow-lg">
+                                    Place Bet
+                                </button>
+                            </div>
+
+                            <h3 class="text-xl font-semibold text-gray-300 mb-3">Real-time Bets</h3>
+                            <div class="bg-gray-700 p-4 rounded-lg shadow-inner border border-gray-600">
+                                <div class="flex justify-around text-center mb-3">
+                                    <div>
+                                        <p class="text-sm text-gray-400">Total Bets on ${player1?.name}:</p>
+                                        <p class="text-2xl font-bold text-blue-400">${totalBetsPlayer1.toLocaleString()} ₮</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm text-gray-400">Total Bets on ${player2?.name}:</p>
+                                        <p class="text-2xl font-bold text-red-400">${totalBetsPlayer2.toLocaleString()} ₮</p>
+                                    </div>
+                                </div>
+                                <div class="max-h-40 overflow-y-auto border border-gray-600 rounded-md p-2">
+                                    <ul class="space-y-1">
+                                        ${betsListHtml}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button id="closeStreamBtn" class="mt-6 w-full py-3 px-4 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition duration-150 ease-in-out font-medium shadow-lg">
+                        Close Stream
+                    </button>
+                </div>
+            `;
+
+            document.getElementById('placeBetBtn').addEventListener('click', () => {
+                const betAmount = parseInt(document.getElementById('betAmount').value);
+                const betOnPlayerId = document.getElementById('betPlayer').value;
+
+                if (!betOnPlayerId || betAmount <= 0) {
+                    showModal('Betting Error', 'Please select a player and enter a valid bet amount.');
+                    return;
+                }
+                if (currentUserBalance < betAmount) {
+                    showModal('Betting Error', `Insufficient balance. You need ${betAmount.toLocaleString()} ₮ but have ${currentUserBalance.toLocaleString()} ₮.`);
+                    return;
+                }
+
+                // Deduct balance from current user
+                const currentUserAccount = userAccounts.find(acc => acc.id === loggedInUserId);
+                if (currentUserAccount) {
+                    currentUserAccount.balance -= betAmount;
+                    currentUserBalance = currentUserAccount.balance;
+                    document.getElementById('userBalanceDisplay').textContent = currentUserBalance.toLocaleString() + ' ₮';
+                }
+
+                const newBet = {
+                    id: generateUniqueId(),
+                    duelId: duel.id,
+                    bettorId: loggedInUserId,
+                    betAmount: betAmount,
+                    betOnPlayerId: betOnPlayerId,
+                    timestamp: new Date().toISOString(),
+                };
+
+                bets.push(newBet);
+                saveState();
+                showModal('Betting Status', `Bet of ${betAmount.toLocaleString()} ₮ placed on ${players.find(p => p.id === betOnPlayerId)?.name || 'selected player'}!`);
+                renderDuelStreamAndBetting(duel); // Re-render to update bets list
+            });
+
+            document.getElementById('closeStreamBtn').addEventListener('click', () => {
+                selectedDuel = null;
+                activateTab('duels'); // Go back to active duels list
+            });
+        };
+
+        // --- Main Render Logic ---
+        const renderContent = (tab) => {
+            document.getElementById('loggedInUserIdDisplay').textContent = loggedInUserId || 'Not Logged In';
+            updateBalanceDisplay(); // Always update balance display
+
+            if (!loggedInUserId) {
+                renderLogin();
+                return;
+            }
+
+            switch (tab) {
+                case 'register':
+                    renderRegisterPlayer();
+                    break;
+                case 'players':
+                    renderPlayerList();
+                    break;
+                case 'requests':
+                    renderDuelRequests();
+                    break;
+                case 'duels':
+                    renderActiveDuels();
+                    break;
+                default:
+                    renderRegisterPlayer(); // Default tab after login
+            }
+        };
+
+        // --- Event Listeners for Tabs (attached after renderNavButtons) ---
+        // These are now attached dynamically in renderNavButtons()
+
+        // --- Modal Close Button Listener ---
+        document.getElementById('modalCloseBtn').addEventListener('click', hideModal);
+        document.getElementById('modalOverlay').addEventListener('click', (e) => {
+            if (e.target.id === 'modalOverlay') {
+                hideModal();
+            }
+        });
+
+        // Initial render on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            renderContent(loggedInUserId ? 'register' : 'login'); // Start with login if not logged in
+        });
+    </script>
+</body>
+</html>
+
