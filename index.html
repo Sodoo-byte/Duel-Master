@@ -93,6 +93,22 @@
         .password-toggle:hover {
             color: #e2e8f0; /* gray-200 */
         }
+        .frame-preview {
+            width: 100px;
+            height: 100px;
+            border-radius: 9999px;
+            object-fit: cover;
+            object-position: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: #e2e8f0;
+            background-color: #4a5568;
+        }
+        .frame-preview.border-frame {
+            padding: 4px; /* Adjust padding for border frames */
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-200 p-4 sm:p-6 lg:p-8">
@@ -100,7 +116,7 @@
         <h1 class="text-4xl font-bold text-indigo-500">Duel Master App</h1>
         <p class="text-gray-400 mt-2">Manage players, challenge opponents, and bet on live duels!</p>
         <p class="text-sm text-gray-500 mt-1">Logged in as: <span id="loggedInUserIdDisplay" class="font-mono text-indigo-400 break-all">Not Logged In</span></p>
-        <p class="text-lg font-semibold text-gray-300 mt-2">Your Balance: <span id="userBalanceDisplay" class="text-green-400"></span> ₮</p>
+        <p class="text-lg font-semibold text-gray-300 mt-2">Your Balance: <span id="userBalanceDisplay" class="text-green-400"></span> ₮ | Your Coins: <span id="userCoinsDisplay" class="text-yellow-400"></span> 🪙</p>
     </header>
 
     <nav id="mainNav" class="bg-gray-800 rounded-lg shadow-lg p-2 mb-6 flex justify-center space-x-2 sm:space-x-4">
@@ -133,20 +149,38 @@
         let userAccounts = JSON.parse(localStorage.getItem('duelMasterUserAccounts')) || [];
         let loggedInUserId = localStorage.getItem('duelMasterLoggedInUserId');
         let currentUserBalance = 0; // Will be updated on login
+        let currentUserCoins = 0; // Will be updated on login
         let isCurrentUserAdmin = false; // Track admin status
 
         // Initialize admin accounts if they don't exist
         const initialAdminAccounts = [
-            { id: 'Greed', password: '88912163', email: 'greed@admin.com', phone: '', balance: 1000000, isAdmin: true },
-            { id: 'Pride', password: 'ErmuunAdmin', email: 'pride@admin.com', phone: '', balance: 1000000, isAdmin: true },
-            { id: 'Lust', password: 'BilguunAdmin', email: 'lust@admin.com', phone: '', balance: 1000000, isAdmin: true },
+            { id: 'Greed', password: '88912163', email: 'greed@admin.com', phone: '', balance: 100000000, isAdmin: true, coins: 1000 }, // Greed with 100M and 1000 coins
+            { id: 'Pride', password: 'ErmuunAdmin', email: 'pride@admin.com', phone: '', balance: 1000000, isAdmin: true, coins: 100 },
+            { id: 'Lust', password: 'BilguunAdmin', email: 'lust@admin.com', phone: '', balance: 1000000, isAdmin: true, coins: 100 },
         ];
 
         // Only add default admins if userAccounts is empty (first run)
         if (userAccounts.length === 0) {
             userAccounts = initialAdminAccounts;
             localStorage.setItem('duelMasterUserAccounts', JSON.stringify(userAccounts));
+        } else {
+            // Ensure existing users have 'coins', 'purchasedFrames', 'activeFrame' properties
+            userAccounts = userAccounts.map(user => ({
+                ...user,
+                coins: user.coins !== undefined ? user.coins : 0,
+                purchasedFrames: user.purchasedFrames !== undefined ? user.purchasedFrames : [],
+                activeFrame: user.activeFrame !== undefined ? user.activeFrame : null
+            }));
+            localStorage.setItem('duelMasterUserAccounts', JSON.stringify(userAccounts));
         }
+
+        // Ensure players have 'activeFrame' property
+        players = players.map(player => ({
+            ...player,
+            activeFrame: player.activeFrame !== undefined ? player.activeFrame : null
+        }));
+        localStorage.setItem('duelMasterPlayers', JSON.stringify(players));
+
 
         // Special IDs management
         const SILVER_ID_COST = 50000;
@@ -226,8 +260,39 @@
             return id;
         };
 
+        // Generates a unique User ID (for new sign-ups when not logged in)
+        const generateUniqueUserId = () => {
+            let id;
+            do {
+                id = 'user-' + Math.random().toString(36).substring(2, 8); // e.g., "user-abc123"
+            } while (isIdUsed(id, false)); // Check uniqueness only against existing user accounts
+            return id;
+        };
+
         // Generates a UUID for internal use where a truly unique string is needed
         const generateUniqueId = () => crypto.randomUUID();
+
+        // --- Shop Data ---
+        const COIN_VALUE = 1000; // 1 coin = 1000 Tugrug
+
+        const shopItems = {
+            coins: [
+                { amount: 1, tugrugCost: 1 * COIN_VALUE },
+                { amount: 10, tugrugCost: 10 * COIN_VALUE },
+                { amount: 100, tugrugCost: 100 * COIN_VALUE },
+                { amount: 1000, tugrugCost: 1000 * COIN_VALUE }
+            ],
+            profileFrames: [
+                { id: 'frame-basic-silver', name: 'Basic Silver', cost: 1, type: 'border', value: 'border-2 border-gray-400' },
+                { id: 'frame-golden-glow', name: 'Golden Glow', cost: 3, type: 'border', value: 'border-2 border-yellow-500 shadow-lg shadow-yellow-500/50' },
+                { id: 'frame-diamond-edge', name: 'Diamond Edge', cost: 5, type: 'border', value: 'border-2 border-blue-500 shadow-lg shadow-blue-500/50' },
+                { id: 'frame-fiery-aura', name: 'Fiery Aura', cost: 7, type: 'custom-class', value: 'bg-gradient-to-br from-red-500 to-orange-500 text-transparent bg-clip-text' },
+                { id: 'frame-neon-circuit', name: 'Neon Circuit', cost: 9, type: 'custom-class', value: 'border-2 border-purple-400 shadow-lg shadow-purple-400/50 animate-pulse' },
+                { id: 'frame-royal-crest', name: 'Royal Crest', cost: 10, type: 'custom-class', value: 'border-4 border-yellow-700 shadow-xl shadow-yellow-700/70' }
+            ],
+            playerIDChangeCost: 50 // Cost in coins to change a player's ID
+        };
+
 
         // --- Modal Functions ---
         const showModal = (title, message) => {
@@ -265,9 +330,11 @@
             if (user) {
                 loggedInUserId = user.id; // Store the actual ID from the userAccounts array
                 currentUserBalance = user.balance;
+                currentUserCoins = user.coins;
                 isCurrentUserAdmin = user.isAdmin || false; // Set admin status
                 saveState();
-                showModal('Login Successful', `Welcome, ${loggedInUserId}! Your balance: ${currentUserBalance.toLocaleString()} ₮`);
+                showModal('Login Successful', `Welcome, ${loggedInUserId}! Your balance: ${currentUserBalance.toLocaleString()} ₮. Your coins: ${currentUserCoins.toLocaleString()} 🪙`);
+                console.log('Logged in user:', user); // For debugging admin access
                 renderMainAppContent(); // Show main app after login
             } else {
                 showModal('Login Failed', 'Invalid ID or password.');
@@ -277,6 +344,7 @@
         const logoutUser = () => {
             loggedInUserId = null;
             currentUserBalance = 0;
+            currentUserCoins = 0;
             isCurrentUserAdmin = false;
             saveState();
             showModal('Logged Out', 'You have been logged out.');
@@ -287,9 +355,12 @@
             const user = userAccounts.find(acc => acc.id === loggedInUserId);
             if (user) {
                 currentUserBalance = user.balance;
+                currentUserCoins = user.coins;
                 document.getElementById('userBalanceDisplay').textContent = currentUserBalance.toLocaleString() + ' ₮';
+                document.getElementById('userCoinsDisplay').textContent = currentUserCoins.toLocaleString() + ' 🪙';
             } else {
                 document.getElementById('userBalanceDisplay').textContent = 'N/A';
+                document.getElementById('userCoinsDisplay').textContent = 'N/A';
             }
         };
 
@@ -318,6 +389,9 @@
                     <button id="duelsTabBtn" class="px-4 py-2 rounded-md font-medium transition duration-150 ease-in-out bg-gray-700 text-gray-300 hover:bg-gray-600">
                         Active Duels
                     </button>
+                    <button id="shopTabBtn" class="px-4 py-2 rounded-md font-medium transition duration-150 ease-in-out bg-yellow-600 text-white shadow-md hover:bg-yellow-700">
+                        Shop
+                    </button>
                     <button id="logoutBtn" class="px-4 py-2 rounded-md font-medium transition duration-150 ease-in-out bg-red-600 text-white shadow-md hover:bg-red-700">
                         Logout (${loggedInUserId})
                     </button>
@@ -325,8 +399,10 @@
                 document.getElementById('playersTabBtn').addEventListener('click', () => activateTab('players'));
                 document.getElementById('requestsTabBtn').addEventListener('click', () => activateTab('requests'));
                 document.getElementById('duelsTabBtn').addEventListener('click', () => activateTab('duels'));
+                document.getElementById('shopTabBtn').addEventListener('click', () => activateTab('shop'));
                 document.getElementById('logoutBtn').addEventListener('click', logoutUser);
             }
+            console.log('Is current user admin (renderNavButtons)?', isCurrentUserAdmin); // For debugging
         };
 
         const activateTab = (tabName) => {
@@ -338,10 +414,14 @@
             const buttons = mainNav.querySelectorAll('button');
             buttons.forEach(button => {
                 if (button.id.includes(tabName)) {
-                    button.classList.remove('bg-gray-700', 'text-gray-300', 'hover:bg-gray-600');
+                    button.classList.remove('bg-gray-700', 'text-gray-300', 'hover:bg-gray-600', 'bg-yellow-600', 'hover:bg-yellow-700');
                     button.classList.add('bg-indigo-600', 'text-white', 'shadow-md');
-                } else if (button.id !== 'logoutBtn') { // Don't change logout button style
+                } else if (button.id === 'shopTabBtn') {
                     button.classList.remove('bg-indigo-600', 'text-white', 'shadow-md');
+                    button.classList.add('bg-yellow-600', 'text-white', 'shadow-md', 'hover:bg-yellow-700');
+                }
+                else if (button.id !== 'logoutBtn') { // Don't change logout button style
+                    button.classList.remove('bg-indigo-600', 'text-white', 'shadow-md', 'bg-yellow-600', 'hover:bg-yellow-700');
                     button.classList.add('bg-gray-700', 'text-gray-300', 'hover:bg-gray-600');
                 }
             });
@@ -376,6 +456,7 @@
             `;
             document.getElementById('loggedInUserIdDisplay').textContent = 'Not Logged In';
             document.getElementById('userBalanceDisplay').textContent = 'N/A';
+            document.getElementById('userCoinsDisplay').textContent = 'N/A';
 
             document.getElementById('loginForm').addEventListener('submit', (e) => {
                 e.preventDefault();
@@ -384,7 +465,7 @@
                 loginUser(id, password);
             });
 
-            document.getElementById('switchToRegisterPlayerBtn').addEventListener('click', () => activateTab('registerPlayer'));
+            document.getElementById('switchToRegisterPlayerBtn').addEventListener('click', () => renderContent('registerPlayer'));
             setupPasswordToggle('loginPassword');
             renderNavButtons(); // Clear nav buttons when not logged in
         };
@@ -421,131 +502,144 @@
             `).join('');
 
             const isUserLoggedIn = loggedInUserId !== null;
-            const showAccountDetails = !isUserLoggedIn || isCurrentUserAdmin; // Show if not logged in OR if admin
+            const isCreatingNewUserAccount = !isUserLoggedIn || isCurrentUserAdmin; // True if guest or admin
 
-            const userAccountSection = `
-                <fieldset class="border border-gray-700 p-4 rounded-md space-y-4 ${showAccountDetails ? '' : 'hidden'}">
-                    <legend class="text-lg font-semibold text-gray-200 px-2">Account Details</legend>
+            const playerProfileSection = `
+                <fieldset class="border border-gray-700 p-4 rounded-md space-y-4">
+                    <legend class="text-lg font-semibold text-gray-200 px-2">Player Profile Details</legend>
                     <div>
-                        <label for="registerUserId" class="block text-sm font-medium text-gray-300">Choose Your User ID</label>
-                        <input type="text" id="registerUserId" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${showAccountDetails ? 'required' : 'disabled'}>
-                        <p id="registerUserIdError" class="text-red-400 text-xs mt-1 hidden">User ID must be unique.</p>
+                        <label for="playerName" class="block text-sm font-medium text-gray-300">Player Name</label>
+                        <input type="text" id="playerName" class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
                     </div>
-                    <div class="password-input-container">
-                        <label for="registerPassword" class="block text-sm font-medium text-gray-300">Password</label>
-                        <input type="password" id="registerPassword" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${showAccountDetails ? 'required' : 'disabled'}>
-                        <i class="fas fa-eye password-toggle" id="registerPasswordToggle"></i>
-                        <p id="passwordStrength" class="text-xs mt-1 text-gray-400">Password must be at least 8 characters long, contain uppercase, lowercase, number, and special character.</p>
+                    <div>
+                        <label for="photoUpload" class="block text-sm font-medium text-gray-300">Player Photo</label>
+                        <input type="file" id="photoUpload" accept="image/*" class="mt-1 block w-full text-sm text-gray-400">
+                        <img id="photoPreview" src="https://placehold.co/100x100/AEC6CF/FFFFFF?text=Preview" alt="Photo Preview" class="mt-2 w-24 h-24 rounded-full object-cover object-center border border-gray-600" />
+                        <p id="photoError" class="text-red-400 text-xs mt-1 hidden"></p>
+                    </div>
+                    <div>
+                        <label for="age" class="block text-sm font-medium text-gray-300">Age</label>
+                        <input type="number" id="age" class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                    </div>
+                    <div>
+                        <label for="weight" class="block text-sm font-medium text-gray-300">Weight (kg)</label>
+                        <input type="number" id="weight" class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                    </div>
+                   
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300">Games Played</label>
+                        <div class="multi-select-dropdown mt-1">
+                            <button type="button" id="gamesSelectBtn" class="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm bg-gray-700 text-left focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-300">
+                                Select Games
+                            </button>
+                            <div id="gamesOptions" class="multi-select-dropdown-options hidden">
+                                ${gameOptionsHtml}
+                            </div>
+                        </div>
+                        <div id="selectedGamesDisplay" class="mt-2 text-sm text-gray-400"></div>
+                        <div id="gameRanksInputContainer" class="mt-4 space-y-3 p-3 border border-gray-700 rounded-md bg-gray-700">
+                            <!-- Dynamic rank inputs will be inserted here -->
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-300">Player ID Type</label>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700">
+                                <input type="radio" name="idType" value="normal" checked class="form-radio text-indigo-500" id="normalIdRadio">
+                                <span class="ml-2 text-gray-300">Normal ID (Free)</span>
+                            </label>
+                            <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 ${availableSilver.length === 0 || (isUserLoggedIn ? currentUserBalance : 0) < SILVER_ID_COST ? 'opacity-50 cursor-not-allowed' : ''}">
+                                <input type="radio" name="idType" value="silver" class="form-radio text-indigo-500" id="silverIdRadio" ${availableSilver.length === 0 || (isUserLoggedIn ? currentUserBalance : 0) < SILVER_ID_COST ? 'disabled' : ''}>
+                                <span class="ml-2 text-gray-300">Silver ID (${SILVER_ID_COST.toLocaleString()} ₮)</span>
+                            </label>
+                            <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 ${availableGolden.length === 0 || (isUserLoggedIn ? currentUserBalance : 0) < GOLDEN_ID_COST ? 'opacity-50 cursor-not-allowed' : ''}">
+                                <input type="radio" name="idType" value="golden" class="form-radio text-indigo-500" id="goldenIdRadio" ${availableGolden.length === 0 || (isUserLoggedIn ? currentUserBalance : 0) < GOLDEN_ID_COST ? 'disabled' : ''}>
+                                <span class="ml-2 text-gray-300">Golden ID (${GOLDEN_ID_COST.toLocaleString()} ₮)</span>
+                            </label>
+                            <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 ${ (isUserLoggedIn ? currentUserBalance : 0) < SPECIAL_ID_COST ? 'opacity-50 cursor-not-allowed' : ''}">
+                                <input type="radio" name="idType" value="special" class="form-radio text-indigo-500" id="specialIdRadio" ${ (isUserLoggedIn ? currentUserBalance : 0) < SPECIAL_ID_COST ? 'disabled' : ''}>
+                                <span class="ml-2 text-gray-300">Special ID (${SPECIAL_ID_COST.toLocaleString()} ₮)</span>
+                            </label>
+                        </div>
+
+                        <div id="silverIdSelection" class="mt-2 hidden">
+                            <label for="silverId" class="block text-sm font-medium text-gray-300">Select Silver ID</label>
+                            <select id="silverId" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                <option value="">-- Select --</option>
+                                ${silverIdOptionsHtml}
+                            </select>
+                        </div>
+                        <div id="goldenIdSelection" class="mt-2 hidden">
+                            <label for="goldenId" class="block text-sm font-medium text-gray-300">Select Golden ID</label>
+                            <select id="goldenId" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                <option value="">-- Select --</option>
+                                ${goldenIdOptionsHtml}
+                            </select>
+                        </div>
+                        <div id="specialIdInput" class="mt-2 hidden">
+                            <label for="customSpecialId" class="block text-sm font-medium text-gray-300">Enter Custom Special ID (No numbers, 3+ chars)</label>
+                            <input type="text" id="customSpecialId" placeholder="e.g., MYDUELID" class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
                     </div>
                 </fieldset>
             `;
 
-            const contactInfoSection = `
-                <fieldset class="border border-gray-700 p-4 rounded-md space-y-4 ${showAccountDetails ? '' : 'hidden'}">
-                    <legend class="text-lg font-semibold text-gray-200 px-2">Contact Information (for recovery)</legend>
-                    <div class="password-input-container">
-                        <label for="confirmPassword" class="block text-sm font-medium text-gray-300">Confirm Password</label>
-                        <input type="password" id="confirmPassword" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${showAccountDetails ? 'required' : 'disabled'}>
-                        <i class="fas fa-eye password-toggle" id="confirmPasswordToggle"></i>
-                        <p id="confirmPasswordError" class="text-red-400 text-xs mt-1 hidden">Passwords do not match.</p>
-                    </div>
-                    <div>
-                        <label for="email" class="block text-sm font-medium text-gray-300">Email (Optional)</label>
-                        <input type="email" id="email" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${showAccountDetails ? '' : 'disabled'}>
-                    </div>
-                    <div>
-                        <label for="phone" class="block text-sm font-medium text-gray-300">Phone Number (Optional)</label>
-                        <input type="tel" id="phone" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" ${showAccountDetails ? '' : 'disabled'}>
-                        <p id="contactError" class="text-red-400 text-xs mt-1 hidden">Please provide either an email or a phone number.</p>
-                    </div>
-                </fieldset>
-            `;
+            let accountDetailsSection = '';
+            // Account details section is always present if creating a new user account (guest or admin)
+            if (isCreatingNewUserAccount) {
+                accountDetailsSection = `
+                    <fieldset class="border border-gray-700 p-4 rounded-md space-y-4">
+                        <legend class="text-lg font-semibold text-gray-200 px-2">Account Details</legend>
+                        ${isCurrentUserAdmin ? `
+                            <div>
+                                <label for="registerUserId" class="block text-sm font-medium text-gray-300">New User ID (for admin-created account)</label>
+                                <input type="text" id="registerUserId" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                                <p id="registerUserIdError" class="text-red-400 text-xs mt-1 hidden">User ID must be unique.</p>
+                            </div>
+                        ` : ''}
+                        <div class="password-input-container">
+                            <label for="registerPassword" class="block text-sm font-medium text-gray-300">Password</label>
+                            <input type="password" id="registerPassword" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                            <i class="fas fa-eye password-toggle" id="registerPasswordToggle"></i>
+                            <p id="passwordStrength" class="text-xs mt-1 text-gray-400">Password must be at least 8 characters long, contain uppercase, lowercase, number, and special character.</p>
+                        </div>
+                        <div class="password-input-container">
+                            <label for="confirmPassword" class="block text-sm font-medium text-gray-300">Confirm Password</label>
+                            <input type="password" id="confirmPassword" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                            <i class="fas fa-eye password-toggle" id="confirmPasswordToggle"></i>
+                            <p id="confirmPasswordError" class="text-red-400 text-xs mt-1 hidden">Passwords do not match.</p>
+                        </div>
+                    </fieldset>
+                `;
+            }
+
+            let contactInfoSection = '';
+            // Contact info section is always present if creating a new user account (guest or admin)
+            if (isCreatingNewUserAccount) {
+                contactInfoSection = `
+                    <fieldset class="border border-gray-700 p-4 rounded-md space-y-4">
+                        <legend class="text-lg font-semibold text-gray-200 px-2">Contact Information (for recovery)</legend>
+                        <div>
+                            <label for="email" class="block text-sm font-medium text-gray-300">Email (Optional)</label>
+                            <input type="email" id="email" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label for="phone" class="block text-sm font-medium text-gray-300">Phone Number (Optional)</label>
+                            <input type="tel" id="phone" class="mt-1 block w-full px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                            <p id="contactError" class="text-red-400 text-xs mt-1 hidden">Please provide either an email or a phone number.</p>
+                        </div>
+                    </fieldset>
+                `;
+            }
 
             appContentDiv.innerHTML = `
                 <div class="bg-gray-800 p-6 rounded-lg shadow-lg mb-6 w-full max-w-md mx-auto border border-gray-700">
                     <h2 class="text-2xl font-bold text-gray-100 mb-4">${isUserLoggedIn ? 'Register New Player' : 'Sign Up & Create Player Profile'}</h2>
                     <form id="registrationForm" class="space-y-4">
-                        ${userAccountSection}
-
-                        <fieldset class="border border-gray-700 p-4 rounded-md space-y-4">
-                            <legend class="text-lg font-semibold text-gray-200 px-2">Player Profile Details</legend>
-                            <div>
-                                <label for="playerName" class="block text-sm font-medium text-gray-300">Player Name</label>
-                                <input type="text" id="playerName" class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
-                            </div>
-                            <div>
-                                <label for="photoUpload" class="block text-sm font-medium text-gray-300">Player Photo</label>
-                                <input type="file" id="photoUpload" accept="image/*" class="mt-1 block w-full text-sm text-gray-400">
-                                <img id="photoPreview" src="https://placehold.co/100x100/AEC6CF/FFFFFF?text=Preview" alt="Photo Preview" class="mt-2 w-24 h-24 rounded-full object-cover object-center border border-gray-600">
-                                <p id="photoError" class="text-red-400 text-xs mt-1 hidden"></p>
-                            </div>
-                            <div>
-                                <label for="age" class="block text-sm font-medium text-gray-300">Age</label>
-                                <input type="number" id="age" class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
-                            </div>
-                            <div>
-                                <label for="weight" class="block text-sm font-medium text-gray-300">Weight (kg)</label>
-                                <input type="number" id="weight" class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-gray-300">Games Played</label>
-                                <div class="multi-select-dropdown mt-1">
-                                    <button type="button" id="gamesSelectBtn" class="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm bg-gray-700 text-left focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-300">
-                                        Select Games
-                                    </button>
-                                    <div id="gamesOptions" class="multi-select-dropdown-options hidden">
-                                        ${gameOptionsHtml}
-                                    </div>
-                                </div>
-                                <div id="selectedGamesDisplay" class="mt-2 text-sm text-gray-400"></div>
-                                <div id="gameRanksInputContainer" class="mt-4 space-y-3 p-3 border border-gray-700 rounded-md bg-gray-700">
-                                    <!-- Dynamic rank inputs will be inserted here -->
-                                </div>
-                            </div>
-
-                            <div class="space-y-2">
-                                <label class="block text-sm font-medium text-gray-300">Player ID Type</label>
-                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700">
-                                        <input type="radio" name="idType" value="normal" checked class="form-radio text-indigo-500" id="normalIdRadio">
-                                        <span class="ml-2 text-gray-300">Normal ID (Free)</span>
-                                    </label>
-                                    <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 ${availableSilver.length === 0 || (isUserLoggedIn ? currentUserBalance : 500000) < SILVER_ID_COST ? 'opacity-50 cursor-not-allowed' : ''}">
-                                        <input type="radio" name="idType" value="silver" class="form-radio text-indigo-500" id="silverIdRadio" ${availableSilver.length === 0 || (isUserLoggedIn ? currentUserBalance : 500000) < SILVER_ID_COST ? 'disabled' : ''}>
-                                        <span class="ml-2 text-gray-300">Silver ID (${SILVER_ID_COST.toLocaleString()} ₮)</span>
-                                    </label>
-                                    <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 ${availableGolden.length === 0 || (isUserLoggedIn ? currentUserBalance : 500000) < GOLDEN_ID_COST ? 'opacity-50 cursor-not-allowed' : ''}">
-                                        <input type="radio" name="idType" value="golden" class="form-radio text-indigo-500" id="goldenIdRadio" ${availableGolden.length === 0 || (isUserLoggedIn ? currentUserBalance : 500000) < GOLDEN_ID_COST ? 'disabled' : ''}>
-                                        <span class="ml-2 text-gray-300">Golden ID (${GOLDEN_ID_COST.toLocaleString()} ₮)</span>
-                                    </label>
-                                    <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 ${ (isUserLoggedIn ? currentUserBalance : 500000) < SPECIAL_ID_COST ? 'opacity-50 cursor-not-allowed' : ''}">
-                                        <input type="radio" name="idType" value="special" class="form-radio text-indigo-500" id="specialIdRadio" ${ (isUserLoggedIn ? currentUserBalance : 500000) < SPECIAL_ID_COST ? 'disabled' : ''}>
-                                        <span class="ml-2 text-gray-300">Special ID (${SPECIAL_ID_COST.toLocaleString()} ₮)</span>
-                                    </label>
-                                </div>
-
-                                <div id="silverIdSelection" class="mt-2 hidden">
-                                    <label for="silverId" class="block text-sm font-medium text-gray-300">Select Silver ID</label>
-                                    <select id="silverId" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                                        <option value="">-- Select --</option>
-                                        ${silverIdOptionsHtml}
-                                    </select>
-                                </div>
-                                <div id="goldenIdSelection" class="mt-2 hidden">
-                                    <label for="goldenId" class="block text-sm font-medium text-gray-300">Select Golden ID</label>
-                                    <select id="goldenId" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                                        <option value="">-- Select --</option>
-                                        ${goldenIdOptionsHtml}
-                                    </select>
-                                </div>
-                                <div id="specialIdInput" class="mt-2 hidden">
-                                    <label for="customSpecialId" class="block text-sm font-medium text-gray-300">Enter Custom Special ID (No numbers, 3+ chars)</label>
-                                    <input type="text" id="customSpecialId" placeholder="e.g., MYDUELID" class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                                </div>
-                            </div>
-                        </fieldset>
-                        ${contactInfoSection} <!-- Moved here -->
+                        ${playerProfileSection}
+                        ${accountDetailsSection}
+                        ${contactInfoSection}
 
                         <button type="submit" class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
                             ${isUserLoggedIn ? 'Register New Player' : 'Sign Up & Create Player'}
@@ -560,8 +654,10 @@
             `;
 
             const registrationForm = document.getElementById('registrationForm');
+            // These might be null if not admin and not creating new user account
             const registerUserIdInput = document.getElementById('registerUserId');
             const registerUserIdError = document.getElementById('registerUserIdError');
+
             const registerPasswordInput = document.getElementById('registerPassword');
             const confirmPasswordInput = document.getElementById('confirmPassword');
             const confirmPasswordError = document.getElementById('confirmPasswordError');
@@ -595,8 +691,12 @@
             let gameSpecificRanks = {}; // Stores { 'Game Name': 'Rank Value' }
 
             // Setup password toggles for this form
-            setupPasswordToggle('registerPassword');
-            setupPasswordToggle('confirmPassword');
+            if (registerPasswordInput) {
+                setupPasswordToggle('registerPassword');
+            }
+            if (confirmPasswordInput) {
+                setupPasswordToggle('confirmPassword');
+            }
 
             const updateSelectedGamesDisplay = () => {
                 selectedGamesDisplay.textContent = selectedGames.length > 0 ? selectedGames.join(', ') : 'No games selected';
@@ -628,7 +728,7 @@
                             <label for="rank-${game.replace(/\s/g, '-')}" class="block text-sm font-medium text-gray-300">${game} Rank</label>
                             <select id="rank-${game.replace(/\s/g, '-')}" data-game="${game}" class="game-rank-input mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
                                 <option value="">-- Select Rank --</option>
-                                ${options}
+                                ${optionsHtml}
                             </select>
                         `;
                     } else {
@@ -720,7 +820,7 @@
             toggleIdTypeVisibility();
 
             const validatePasswordInput = () => {
-                if (showAccountDetails) { // Only validate if account details are visible/enabled
+                if (registerPasswordInput) { // Only validate if password input is present
                     const pass = registerPasswordInput.value;
                     let strength = 0;
                     if (pass.length >= 8) strength++;
@@ -741,8 +841,10 @@
                 }
             };
 
-            if (showAccountDetails) {
+            if (registerPasswordInput) { // Only add listener if element exists
                 registerPasswordInput.addEventListener('input', validatePasswordInput);
+            }
+            if (confirmPasswordInput) { // Only add listener if element exists
                 confirmPasswordInput.addEventListener('input', () => {
                     if (registerPasswordInput.value !== confirmPasswordInput.value) {
                         confirmPasswordError.classList.remove('hidden');
@@ -760,27 +862,22 @@
             registrationForm.addEventListener('submit', (e) => {
                 e.preventDefault();
 
-                let currentUserIdForPlayer = loggedInUserId; // Default to logged-in user
+                let currentUserIdForPlayer = loggedInUserId; // Default to logged-in user if already logged in
                 let playerCost = 0; // Cost for player ID
                 let newAccountCreated = false;
+                let newGeneratedUserId = null; // To store auto-generated ID for display
 
                 // --- Account Validation (if new user or admin creating new user) ---
-                if (showAccountDetails) {
-                    const userId = registerUserIdInput.value.trim();
+                if (isCreatingNewUserAccount) { // This variable is true if guest OR admin
                     const password = registerPasswordInput.value;
                     const confirmPassword = confirmPasswordInput.value;
                     const email = emailInput.value.trim();
                     const phone = phoneInput.value.trim();
 
-                    if (!userId || !password) {
-                        showModal('Registration Error', 'User ID and Password are required.');
+                    // Password validation
+                    if (!password) {
+                        showModal('Registration Error', 'Password is required.');
                         return;
-                    }
-                    if (!email && !phone) {
-                        contactError.classList.remove('hidden');
-                        return;
-                    } else {
-                        contactError.classList.add('hidden');
                     }
                     if (password !== confirmPassword) {
                         showModal('Registration Error', 'Passwords do not match.');
@@ -790,17 +887,39 @@
                          showModal('Registration Error', 'Password must be at least 8 characters long and contain uppercase, lowercase, number, and special character.');
                          return;
                     }
-                    if (isIdUsed(userId, false)) { // Check if User ID is unique (pass false for isPlayerId to check only userAccounts and special IDs)
-                        showModal('Registration Error', 'This User ID is already taken. Please choose another.');
+
+                    // Contact info validation
+                    if (!email && !phone) {
+                        contactError.classList.remove('hidden');
                         return;
+                    } else {
+                        contactError.classList.add('hidden');
                     }
-                    currentUserIdForPlayer = userId; // This will be the new loggedInUserId
+
+                    if (!isUserLoggedIn) {
+                        // Guest signing up: User ID is auto-generated
+                        newGeneratedUserId = generateUniqueUserId();
+                        currentUserIdForPlayer = newGeneratedUserId;
+                    } else if (isCurrentUserAdmin) {
+                        // Admin creating new user: User ID is provided by admin
+                        const userId = registerUserIdInput.value.trim();
+                        if (!userId) {
+                            showModal('Registration Error', 'New User ID is required.');
+                            return;
+                        }
+                        if (isIdUsed(userId, false)) { // Check if User ID is unique (pass false for isPlayerId to check only userAccounts and special IDs)
+                            showModal('Registration Error', 'This User ID is already taken. Please choose another.');
+                            return;
+                        }
+                        currentUserIdForPlayer = userId;
+                    }
+                    newAccountCreated = true;
                 }
 
                 // --- Player Profile Validation ---
                 const playerName = playerNameInput.value;
                 const age = ageInput.value;
-                const weight = weightInput.getElementById('weight').value;
+                const weight = weightInput.value;
                 const idType = document.querySelector('input[name="idType"]:checked').value;
                 let playerId;
 
@@ -874,7 +993,8 @@
                 }
 
                 // Determine effective balance for cost check
-                let balanceForCheck = isUserLoggedIn ? currentUserBalance : 500000; // New users get 500k starting balance
+                // New users now start with 0 balance, existing users use their current balance
+                let balanceForCheck = isUserLoggedIn ? currentUserBalance : 0;
 
                 if (playerCost > 0 && balanceForCheck < playerCost) {
                     showModal('Payment Error', `Insufficient balance. You need ${playerCost.toLocaleString()} ₮ but have ${balanceForCheck.toLocaleString()} ₮.`);
@@ -884,24 +1004,26 @@
                 // Handle balance deduction and user account creation/update
                 let finalUserBalance = balanceForCheck - playerCost;
 
-                if (!isUserLoggedIn) {
-                    // This is a new user registering their first player
+                if (newAccountCreated) {
+                    // This is a new user account being created (either by guest or admin)
                     const newUserAccount = {
                         id: currentUserIdForPlayer,
                         password: registerPasswordInput.value,
                         email: emailInput.value.trim(),
                         phone: phoneInput.value.trim(),
-                        balance: finalUserBalance,
-                        isAdmin: false,
+                        balance: finalUserBalance, // This will be 0 or negative based on playerCost
+                        coins: 0, // New users start with 0 coins
+                        isAdmin: isCurrentUserAdmin, // If admin is creating, it's a regular user unless specified otherwise (not in this scope)
+                        purchasedFrames: [],
+                        activeFrame: null
                     };
                     userAccounts.push(newUserAccount);
-                    loggedInUserId = newUserAccount.id; // Auto-login
+                    loggedInUserId = newUserAccount.id; // Auto-login the newly created user
                     currentUserBalance = newUserAccount.balance;
-                    isCurrentUserAdmin = newUserAccount.isAdmin;
-                    newAccountCreated = true;
-
+                    currentUserCoins = newUserAccount.coins;
+                    isCurrentUserAdmin = newUserAccount.isAdmin; // Update admin status for the newly logged in user
                 } else {
-                    // User is already logged in, registering another player
+                    // User is already logged in (and not admin creating a new user account), registering another player
                     const loggedInAccount = userAccounts.find(acc => acc.id === loggedInUserId);
                     if (loggedInAccount) {
                         loggedInAccount.balance -= playerCost;
@@ -926,12 +1048,17 @@
                     status: 'available',
                     registeredBy: currentUserIdForPlayer, // Link to the user account
                     games: playerGamesWithRanks,
-                    idType: idType // Store ID type for display formatting
+                    idType: idType, // Store ID type for display formatting
+                    activeFrame: null // New players start with no active frame
                 };
                 players.push(newPlayer);
 
                 saveState();
-                showModal('Registration Status', `Player "${playerName}" registered successfully with ID "${playerId}"! Cost: ${playerCost.toLocaleString()} ₮. Your new balance: ${finalUserBalance.toLocaleString()} ₮.`);
+                let registrationMessage = `Player "${playerName}" registered successfully with ID "${playerId}"! Cost: ${playerCost.toLocaleString()} ₮. Your new balance: ${finalUserBalance.toLocaleString()} ₮.`;
+                if (newGeneratedUserId) {
+                    registrationMessage += ` Your new User ID is: ${newGeneratedUserId}. Please remember it for future logins.`;
+                }
+                showModal('Registration Status', registrationMessage);
 
                 // Clear form and reset photo preview
                 registrationForm.reset();
@@ -1004,7 +1131,7 @@
 
                     // Filter by Age
                     if (filterCriteria.minAge) {
-                        filteredPlayers = filteredPlayers.filter(player => player.age >= parseInt(filterCriteria.minAge));
+                                                filteredPlayers = filteredPlayers.filter(player => player.age >= parseInt(filterCriteria.minAge));
                     }
                     if (filterCriteria.maxAge) {
                         filteredPlayers = filteredPlayers.filter(player => player.age <= parseInt(filterCriteria.maxAge));
@@ -1063,10 +1190,37 @@
                             ? `Registered by: ${registeredByUser.id.toUpperCase()}`
                             : `Registered by: ${player.registeredBy}`;
 
+                        // Determine the frame class/style
+                        const playerOwnerAccount = userAccounts.find(acc => acc.id === player.registeredBy);
+                        const activeFrame = playerOwnerAccount?.activeFrame;
+                        let frameClass = '';
+                        let frameStyle = '';
+                        let photoClass = 'w-20 h-20 rounded-full object-cover object-center';
+                        let photoWrapperClass = 'relative w-20 h-20 rounded-full flex-shrink-0'; // Added for frame positioning
+
+                        if (activeFrame) {
+                            const frameData = shopItems.profileFrames.find(f => f.id === activeFrame);
+                            if (frameData) {
+                                if (frameData.type === 'border') {
+                                    frameClass = frameData.value; // Tailwind border classes
+                                    photoWrapperClass += ` ${frameClass}`;
+                                    photoClass = 'w-full h-full rounded-full object-cover object-center'; // Make photo fill the bordered wrapper
+                                } else if (frameData.type === 'custom-class') {
+                                    // For custom classes that might apply to the text/image itself
+                                    // This might require more complex rendering or SVG overlays for actual "frames"
+                                    // For now, let's just apply it to the image wrapper or a div around it.
+                                    photoWrapperClass += ` ${frameData.value}`;
+                                    photoClass = 'w-full h-full rounded-full object-cover object-center';
+                                }
+                            }
+                        }
+
 
                         playersHtml += `
                             <div class="flex items-center bg-gray-700 p-4 rounded-lg shadow-md border border-gray-600">
-                                <img src="${player.photoUrl}" onerror="this.onerror=null;this.src='https://placehold.co/100x100/CCCCCC/FFFFFF?text=Error';" alt="${player.name}" class="w-20 h-20 rounded-full object-cover object-center mr-4" />
+                                <div class="${photoWrapperClass} mr-4">
+                                    <img src="${player.photoUrl}" onerror="this.onerror=null;this.src='https://placehold.co/100x100/CCCCCC/FFFFFF?text=Error';" alt="${player.name}" class="${photoClass}" />
+                                </div>
                                 <div class="flex-grow">
                                     <h3 class="text-lg font-semibold text-gray-100">${player.name}</h3>
                                     <p class="text-xs text-gray-400">ID: ${displayedPlayerId}</p>
@@ -1092,7 +1246,7 @@
                 document.querySelectorAll('.send-duel-btn').forEach(button => {
                     button.addEventListener('click', (e) => {
                         const recipientPlayerId = e.target.dataset.playerId;
-                        handleSendDuelRequest(recipientPlayerId);
+                        promptForDuelRequest(recipientPlayerId);
                     });
                 });
             };
@@ -1293,7 +1447,7 @@
             updateFilterSelectedGamesDisplay(); // Initial display for filter games
         };
 
-        const handleSendDuelRequest = (recipientPlayerId) => {
+        const promptForDuelRequest = (recipientPlayerId) => {
             const recipientPlayer = players.find(p => p.id === recipientPlayerId);
             if (!recipientPlayer) {
                 showModal('Error', 'Recipient player not found.');
@@ -1305,38 +1459,95 @@
                 showModal('Error', 'You must register at least one player profile before sending duel requests.');
                 return;
             }
-            // For simplicity, we'll assume the first registered player of the logged-in user sends the request
-            const sendingPlayer = currentUserPlayers[0];
 
-            if (sendingPlayer.id === recipientPlayerId) {
-                showModal('Error', 'You cannot send a duel request to your own player profile.');
-                return;
-            }
+            const playerOptionsHtml = currentUserPlayers.map(p => `
+                <option value="${p.id}">${p.name} (ID: ${p.id})</option>
+            `).join('');
 
-            const existingRequest = duelRequests.find(req =>
-                req.requesterId === sendingPlayer.id &&
-                req.recipientId === recipientPlayerId &&
-                req.status === 'pending'
-            );
+            showModal('Send Duel Request', `
+                <div class="space-y-4">
+                    <p class="text-lg text-gray-200">Requesting duel with: <span class="font-semibold">${recipientPlayer.name} (ID: ${recipientPlayer.id})</span></p>
+                    <div>
+                        <label for="sendingPlayerSelect" class="block text-sm font-medium text-gray-300">Your Player:</label>
+                        <select id="sendingPlayerSelect" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm bg-gray-700 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                            ${playerOptionsHtml}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="inline-flex items-center">
+                            <input type="checkbox" id="enableBettingCheckbox" class="form-checkbox text-indigo-600 rounded-sm" checked>
+                            <span class="ml-2 text-gray-300">Enable Betting (1000 ₮ default)</span>
+                        </label>
+                    </div>
+                    <div id="betAmountContainer" class="mt-2">
+                        <label for="proposedBetAmount" class="block text-sm font-medium text-gray-300">Proposed Bet Amount (₮)</label>
+                        <input type="number" id="proposedBetAmount" value="1000" min="10" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm bg-gray-700 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <button id="confirmSendDuelBtn" class="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-150 ease-in-out font-medium">
+                        Send Request
+                    </button>
+                </div>
+            `);
 
-            if (existingRequest) {
-                showModal('Error', 'A pending duel request already exists for this player.');
-                return;
-            }
+            const enableBettingCheckbox = document.getElementById('enableBettingCheckbox');
+            const betAmountContainer = document.getElementById('betAmountContainer');
+            const proposedBetAmountInput = document.getElementById('proposedBetAmount');
 
-            const newRequest = {
-                id: generateUniqueId(),
-                requesterId: sendingPlayer.id,
-                recipientId: recipientPlayerId,
-                status: 'pending',
-                timestamp: new Date().toISOString(),
-            };
+            enableBettingCheckbox.addEventListener('change', () => {
+                betAmountContainer.classList.toggle('hidden', !enableBettingCheckbox.checked);
+                proposedBetAmountInput.required = enableBettingCheckbox.checked;
+            });
 
-            duelRequests.push(newRequest);
-            saveState();
-            showModal('Duel Request Status', `Duel request sent to ${recipientPlayer.name} from ${sendingPlayer.name}!`);
-            activateTab('requests'); // Go to requests tab
+            document.getElementById('confirmSendDuelBtn').addEventListener('click', () => {
+                const sendingPlayerId = document.getElementById('sendingPlayerSelect').value;
+                const sendingPlayer = players.find(p => p.id === sendingPlayerId);
+
+                if (!sendingPlayer) {
+                    showModal('Error', 'Your selected player not found.');
+                    return;
+                }
+                if (sendingPlayer.id === recipientPlayerId) {
+                    showModal('Error', 'You cannot send a duel request to your own player profile.');
+                    return;
+                }
+
+                const bettingEnabled = enableBettingCheckbox.checked;
+                const proposedBetAmount = bettingEnabled ? parseInt(proposedBetAmountInput.value) : 0;
+
+                if (bettingEnabled && (isNaN(proposedBetAmount) || proposedBetAmount <= 0)) {
+                    showModal('Error', 'Please enter a valid bet amount for the duel.');
+                    return;
+                }
+
+                const existingRequest = duelRequests.find(req =>
+                    req.requesterId === sendingPlayer.id &&
+                    req.recipientId === recipientPlayerId &&
+                    req.status === 'pending'
+                );
+
+                if (existingRequest) {
+                    showModal('Error', 'A pending duel request already exists for this player.');
+                    return;
+                }
+
+                const newRequest = {
+                    id: generateUniqueId(),
+                    requesterId: sendingPlayer.id,
+                    recipientId: recipientPlayerId,
+                    status: 'pending',
+                    timestamp: new Date().toISOString(),
+                    bettingEnabled: bettingEnabled,
+                    proposedBetAmount: proposedBetAmount
+                };
+
+                duelRequests.push(newRequest);
+                saveState();
+                hideModal();
+                showModal('Duel Request Status', `Duel request sent to ${recipientPlayer.name} from ${sendingPlayer.name}! ${bettingEnabled ? `Proposed bet: ${proposedBetAmount.toLocaleString()} ₮` : 'No betting.'}`);
+                activateTab('requests'); // Go to requests tab
+            });
         };
+
 
         const renderDuelRequests = () => {
             const currentUserPlayers = players.filter(p => p.registeredBy === loggedInUserId);
@@ -1353,13 +1564,15 @@
                 incomingRequests.forEach(request => {
                     const requesterPlayer = players.find(p => p.id === request.requesterId);
                     const recipientPlayer = players.find(p => p.id === request.recipientId);
+                    const betInfo = request.bettingEnabled ? ` (Bet: ${request.proposedBetAmount.toLocaleString()} ₮)` : ' (No Bet)';
+
                     requestsHtml += `
                         <div class="flex items-center justify-between bg-gray-700 p-4 rounded-lg shadow-md border border-gray-600">
                             <div>
                                 <p class="text-lg font-semibold text-gray-100">
                                     ${requesterPlayer?.name || 'Unknown Player'} wants to duel with ${recipientPlayer?.name || 'your player'}!
                                 </p>
-                                <p class="text-sm text-gray-400">Status: ${request.status}</p>
+                                <p class="text-sm text-gray-400">Status: ${request.status}${betInfo}</p>
                             </div>
                             <div class="flex space-x-2">
                                 <button data-request-id="${request.id}" class="accept-duel-btn px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition duration-150 ease-in-out text-sm">
@@ -1401,15 +1614,39 @@
         const handleAcceptDuel = (requestId) => {
             const requestIndex = duelRequests.findIndex(req => req.id === requestId);
             if (requestIndex > -1) {
+                const acceptedRequest = duelRequests[requestIndex];
+
+                // Deduct bet amount from both users if betting is enabled
+                if (acceptedRequest.bettingEnabled && acceptedRequest.proposedBetAmount > 0) {
+                    const requesterUser = userAccounts.find(acc => players.find(p => p.id === acceptedRequest.requesterId)?.registeredBy === acc.id);
+                    const recipientUser = userAccounts.find(acc => players.find(p => p.id === acceptedRequest.recipientId)?.registeredBy === acc.id);
+
+                    if (!requesterUser || requesterUser.balance < acceptedRequest.proposedBetAmount) {
+                        showModal('Payment Error', `Requester (${requesterUser?.id || 'Unknown'}) has insufficient balance to cover the bet.`);
+                        return;
+                    }
+                    if (!recipientUser || recipientUser.balance < acceptedRequest.proposedBetAmount) {
+                        showModal('Payment Error', `You (${recipientUser?.id || 'Unknown'}) have insufficient balance to cover the bet.`);
+                        return;
+                    }
+
+                    requesterUser.balance -= acceptedRequest.proposedBetAmount;
+                    recipientUser.balance -= acceptedRequest.proposedBetAmount;
+                    // Update current user's balance if they are involved
+                    if (requesterUser.id === loggedInUserId) currentUserBalance = requesterUser.balance;
+                    if (recipientUser.id === loggedInUserId) currentUserBalance = recipientUser.balance;
+                }
+
                 duelRequests[requestIndex].status = 'accepted';
 
-                const acceptedRequest = duelRequests[requestIndex];
                 const newDuel = {
                     id: generateUniqueId(),
                     player1Id: acceptedRequest.requesterId,
                     player2Id: acceptedRequest.recipientId,
                     status: 'ongoing',
                     timestamp: new Date().toISOString(),
+                    bettingEnabled: acceptedRequest.bettingEnabled,
+                    betAmount: acceptedRequest.proposedBetAmount // Store the actual bet amount
                 };
                 activeDuels.push(newDuel);
                 saveState();
@@ -1446,6 +1683,8 @@
                         ? parseInt(player2.id).toString()
                         : (player2?.idType === 'special' ? player2.id.charAt(0).toUpperCase() + player2.id.slice(1).toLowerCase() : player2?.id);
 
+                    const betInfo = duel.bettingEnabled ? ` (Bet: ${duel.betAmount.toLocaleString()} ₮)` : ' (No Bet)';
+
                     duelsHtml += `
                         <div class="bg-gradient-to-br from-purple-800 to-indigo-800 p-4 rounded-lg shadow-md border border-purple-700">
                             <div class="flex items-center justify-center space-x-4 mb-3">
@@ -1456,7 +1695,7 @@
                             <p class="text-center text-lg font-semibold text-gray-100 mb-2">
                                 ${player1?.name || 'Player 1'} (ID: ${displayedPlayer1Id}) vs ${player2?.name || 'Player 2'} (ID: ${displayedPlayer2Id})
                             </p>
-                            <p class="text-center text-sm text-gray-400 mb-3">Status: <span class="font-medium text-green-400">${duel.status.toUpperCase()}</span></p>
+                            <p class="text-center text-sm text-gray-400 mb-3">Status: <span class="font-medium text-green-400">${duel.status.toUpperCase()}</span>${betInfo}</p>
                             <button data-duel-id="${duel.id}" class="view-stream-btn w-full py-2 px-4 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition duration-150 ease-in-out font-medium shadow-lg">
                                 View Stream & Bet
                             </button>
@@ -1535,23 +1774,29 @@
                         <!-- Betting Section -->
                         <div class="md:col-span-1">
                             <h3 class="text-xl font-semibold text-gray-300 mb-3">Place Your Bets!</h3>
-                            <div class="bg-gray-700 p-4 rounded-lg shadow-inner mb-4 border border-gray-600">
-                                <div class="mb-4">
-                                    <label for="betPlayer" class="block text-sm font-medium text-gray-300 mb-1">Bet on:</label>
-                                    <select id="betPlayer" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                                        <option value="">Select a player</option>
-                                        <option value="${duel.player1Id}">${player1?.name}</option>
-                                        <option value="${duel.player2Id}">${player2?.name}</option>
-                                    </select>
+                            ${duel.bettingEnabled ? `
+                                <div class="bg-gray-700 p-4 rounded-lg shadow-inner mb-4 border border-gray-600">
+                                    <div class="mb-4">
+                                        <label for="betPlayer" class="block text-sm font-medium text-gray-300 mb-1">Bet on:</label>
+                                        <select id="betPlayer" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                            <option value="">Select a player</option>
+                                            <option value="${duel.player1Id}">${player1?.name}</option>
+                                            <option value="${duel.player2Id}">${player2?.name}</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-4">
+                                        <label for="betAmount" class="block text-sm font-medium text-gray-300 mb-1">Bet Amount (Virtual Currency)</label>
+                                        <input type="number" id="betAmount" value="10" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" min="1" required>
+                                    </div>
+                                    <button id="placeBetBtn" class="w-full py-2 px-4 bg-green-600 text-white rounded-md hover:bg-green-700 transition duration-150 ease-in-out font-medium shadow-lg">
+                                        Place Bet
+                                    </button>
                                 </div>
-                                <div class="mb-4">
-                                    <label for="betAmount" class="block text-sm font-medium text-gray-300 mb-1">Bet Amount (Virtual Currency)</label>
-                                    <input type="number" id="betAmount" value="10" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" min="1" required>
-                                </div>
-                                <button id="placeBetBtn" class="w-full py-2 px-4 bg-green-600 text-white rounded-md hover:bg-green-700 transition duration-150 ease-in-out font-medium shadow-lg">
-                                    Place Bet
-                                </button>
-                            </div>
+                            ` : `
+                                <p class="text-center text-gray-400 p-4 bg-gray-700 rounded-lg border border-gray-600">
+                                    Betting is not enabled for this duel.
+                                </p>
+                            `}
 
                             <h3 class="text-xl font-semibold text-gray-300 mb-3">Real-time Bets</h3>
                             <div class="bg-gray-700 p-4 rounded-lg shadow-inner border border-gray-600">
@@ -1580,41 +1825,43 @@
                 </div>
             `;
 
-            document.getElementById('placeBetBtn').addEventListener('click', () => {
-                const betAmount = parseInt(document.getElementById('betAmount').value);
-                const betOnPlayerId = document.getElementById('betPlayer').value;
+            if (duel.bettingEnabled) {
+                document.getElementById('placeBetBtn').addEventListener('click', () => {
+                    const betAmount = parseInt(document.getElementById('betAmount').value);
+                    const betOnPlayerId = document.getElementById('betPlayer').value;
 
-                if (!betOnPlayerId || betAmount <= 0) {
-                    showModal('Betting Error', 'Please select a player and enter a valid bet amount.');
-                    return;
-                }
-                if (currentUserBalance < betAmount) {
-                    showModal('Betting Error', `Insufficient balance. You need ${betAmount.toLocaleString()} ₮ but have ${currentUserBalance.toLocaleString()} ₮.`);
-                    return;
-                }
+                    if (!betOnPlayerId || betAmount <= 0) {
+                        showModal('Betting Error', 'Please select a player and enter a valid bet amount.');
+                        return;
+                    }
+                    if (currentUserBalance < betAmount) {
+                        showModal('Betting Error', `Insufficient balance. You need ${betAmount.toLocaleString()} ₮ but have ${currentUserBalance.toLocaleString()} ₮.`);
+                        return;
+                    }
 
-                // Deduct balance from current user
-                const currentUserAccount = userAccounts.find(acc => acc.id === loggedInUserId);
-                if (currentUserAccount) {
-                    currentUserAccount.balance -= betAmount;
-                    currentUserBalance = currentUserAccount.balance;
-                    document.getElementById('userBalanceDisplay').textContent = currentUserBalance.toLocaleString() + ' ₮';
-                }
+                    // Deduct balance from current user
+                    const currentUserAccount = userAccounts.find(acc => acc.id === loggedInUserId);
+                    if (currentUserAccount) {
+                        currentUserAccount.balance -= betAmount;
+                        currentUserBalance = currentUserAccount.balance;
+                        document.getElementById('userBalanceDisplay').textContent = currentUserBalance.toLocaleString() + ' ₮';
+                    }
 
-                const newBet = {
-                    id: generateUniqueId(),
-                    duelId: duel.id,
-                    bettorId: loggedInUserId,
-                    betAmount: betAmount,
-                    betOnPlayerId: betOnPlayerId,
-                    timestamp: new Date().toISOString(),
-                };
+                    const newBet = {
+                        id: generateUniqueId(),
+                        duelId: duel.id,
+                        bettorId: loggedInUserId,
+                        betAmount: betAmount,
+                        betOnPlayerId: betOnPlayerId,
+                        timestamp: new Date().toISOString(),
+                    };
 
-                bets.push(newBet);
-                saveState();
-                showModal('Betting Status', `Bet of ${betAmount.toLocaleString()} ₮ placed on ${players.find(p => p.id === betOnPlayerId)?.name || 'selected player'}!`);
-                renderDuelStreamAndBetting(duel); // Re-render to update bets list
-            });
+                    bets.push(newBet);
+                    saveState();
+                    showModal('Betting Status', `Bet of ${betAmount.toLocaleString()} ₮ placed on ${players.find(p => p.id === betOnPlayerId)?.name || 'selected player'}!`);
+                    renderDuelStreamAndBetting(duel); // Re-render to update bets list
+                });
+            }
 
             document.getElementById('closeStreamBtn').addEventListener('click', () => {
                 selectedDuel = null;
@@ -1622,26 +1869,343 @@
             });
         };
 
+        // --- Render Shop Section ---
+        const renderShop = () => {
+            const currentUserAccount = userAccounts.find(acc => acc.id === loggedInUserId);
+            const userPurchasedFrames = currentUserAccount?.purchasedFrames || [];
+            const userActiveFrame = currentUserAccount?.activeFrame;
+
+            const coinPurchaseOptions = shopItems.coins.map(item => `
+                <div class="bg-gray-700 p-4 rounded-lg shadow-md border border-gray-600 text-center">
+                    <p class="text-xl font-bold text-yellow-400 mb-2">${item.amount} Coins</p>
+                    <p class="text-gray-300 mb-4">Cost: ${item.tugrugCost.toLocaleString()} ₮</p>
+                    <button data-amount="${item.amount}" data-cost="${item.tugrugCost}" class="buy-coins-btn w-full py-2 px-4 bg-green-600 text-white rounded-md hover:bg-green-700 transition duration-150 ease-in-out font-medium">
+                        Buy Now
+                    </button>
+                </div>
+            `).join('');
+
+            const profileFrameOptions = shopItems.profileFrames.map(frame => {
+                const isPurchased = userPurchasedFrames.includes(frame.id);
+                const isActive = userActiveFrame === frame.id;
+                let buttonHtml = '';
+
+                if (isActive) {
+                    buttonHtml = `<button class="w-full py-2 px-4 bg-gray-500 text-white rounded-md cursor-not-allowed font-medium" disabled>Equipped</button>`;
+                } else if (isPurchased) {
+                    buttonHtml = `<button data-frame-id="${frame.id}" class="equip-frame-btn w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-150 ease-in-out font-medium">Equip</button>`;
+                } else {
+                    buttonHtml = `<button data-frame-id="${frame.id}" data-cost="${frame.cost}" class="buy-frame-btn w-full py-2 px-4 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition duration-150 ease-in-out font-medium">Buy (${frame.cost} 🪙)</button>`;
+                }
+
+                let frameDisplayClass = '';
+                let frameDisplayContent = '';
+                if (frame.type === 'border') {
+                    frameDisplayClass = frame.value;
+                    frameDisplayContent = `<div class="w-full h-full rounded-full bg-gray-600 flex items-center justify-center text-lg">🖼️</div>`;
+                } else if (frame.type === 'custom-class') {
+                    frameDisplayClass = frame.value;
+                    frameDisplayContent = `<div class="w-full h-full rounded-full bg-gray-600 flex items-center justify-center text-lg">✨</div>`;
+                }
+
+                return `
+                    <div class="bg-gray-700 p-4 rounded-lg shadow-md border border-gray-600 text-center">
+                        <p class="text-lg font-bold text-gray-100 mb-2">${frame.name}</p>
+                        <div class="frame-preview mx-auto mb-4 ${frameDisplayClass}">
+                            ${frameDisplayContent}
+                        </div>
+                        ${buttonHtml}
+                    </div>
+                `;
+            }).join('');
+
+            const currentUserPlayers = players.filter(p => p.registeredBy === loggedInUserId);
+            const playerOptionsForIdChange = currentUserPlayers.map(p => `
+                <option value="${p.id}">${p.name} (ID: ${p.id})</option>
+            `).join('');
+
+            appContentDiv.innerHTML = `
+                <div class="bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-6xl mx-auto border border-gray-700">
+                    <h2 class="text-2xl font-bold text-gray-100 mb-6">Shop</h2>
+
+                    <!-- Buy Coins Section -->
+                    <section class="mb-8">
+                        <h3 class="text-xl font-semibold text-gray-200 mb-4">Buy Coins</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            ${coinPurchaseOptions}
+                        </div>
+                    </section>
+
+                    <!-- Profile Frames Section -->
+                    <section class="mb-8">
+                        <h3 class="text-xl font-semibold text-gray-200 mb-4">Profile Frames</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            ${profileFrameOptions}
+                        </div>
+                    </section>
+
+                    <!-- Change Player ID Section -->
+                    <section>
+                        <h3 class="text-xl font-semibold text-gray-200 mb-4">Change Player ID (Cost: ${shopItems.playerIDChangeCost} 🪙)</h3>
+                        <div class="bg-gray-700 p-6 rounded-lg shadow-md border border-gray-600 space-y-4">
+                            <div>
+                                <label for="playerToChangeId" class="block text-sm font-medium text-gray-300">Select Player</label>
+                                <select id="playerToChangeId" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm bg-gray-800 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                    <option value="">-- Select Your Player --</option>
+                                    ${playerOptionsForIdChange}
+                                </select>
+                            </div>
+
+                            <div class="space-y-2">
+                                <label class="block text-sm font-medium text-gray-300">New ID Type</label>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700">
+                                        <input type="radio" name="changeIdType" value="normal" checked class="form-radio text-indigo-500" id="changeNormalIdRadio">
+                                        <span class="ml-2 text-gray-300">Normal ID (Free)</span>
+                                    </label>
+                                    <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 ${getAvailableSilverIds().length === 0 ? 'opacity-50 cursor-not-allowed' : ''}">
+                                        <input type="radio" name="changeIdType" value="silver" class="form-radio text-indigo-500" id="changeSilverIdRadio" ${getAvailableSilverIds().length === 0 ? 'disabled' : ''}>
+                                        <span class="ml-2 text-gray-300">Silver ID (${SILVER_ID_COST.toLocaleString()} ₮)</span>
+                                    </label>
+                                    <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 ${getAvailableGoldenIds().length === 0 ? 'opacity-50 cursor-not-allowed' : ''}">
+                                        <input type="radio" name="changeIdType" value="golden" class="form-radio text-indigo-500" id="changeGoldenIdRadio" ${getAvailableGoldenIds().length === 0 ? 'disabled' : ''}>
+                                        <span class="ml-2 text-gray-300">Golden ID (${GOLDEN_ID_COST.toLocaleString()} ₮)</span>
+                                    </label>
+                                    <label class="inline-flex items-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700">
+                                        <input type="radio" name="changeIdType" value="special" class="form-radio text-indigo-500" id="changeSpecialIdRadio">
+                                        <span class="ml-2 text-gray-300">Special ID (${SPECIAL_ID_COST.toLocaleString()} ₮)</span>
+                                    </label>
+                                </div>
+
+                                <div id="changeSilverIdSelection" class="mt-2 hidden">
+                                    <label for="changeSilverId" class="block text-sm font-medium text-gray-300">Select Silver ID</label>
+                                    <select id="changeSilverId" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                        <option value="">-- Select --</option>
+                                        ${getAvailableSilverIds().map(id => `<option value="${id}">${parseInt(id)}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div id="changeGoldenIdSelection" class="mt-2 hidden">
+                                    <label for="changeGoldenId" class="block text-sm font-medium text-gray-300">Select Golden ID</label>
+                                    <select id="changeGoldenId" class="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                        <option value="">-- Select --</option>
+                                        ${getAvailableGoldenIds().map(id => `<option value="${id}">${id}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div id="changeSpecialIdInput" class="mt-2 hidden">
+                                    <label for="changeCustomSpecialId" class="block text-sm font-medium text-gray-300">Enter Custom Special ID (No numbers, 3+ chars)</label>
+                                    <input type="text" id="changeCustomSpecialId" placeholder="e.g., NEWDUELID" class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                </div>
+                            </div>
+                            <button id="confirmIdChangeBtn" class="w-full py-2 px-4 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition duration-150 ease-in-out font-medium">
+                                Change ID
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            `;
+
+            // Buy Coins Logic
+            document.querySelectorAll('.buy-coins-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const amount = parseInt(e.target.dataset.amount);
+                    const cost = parseInt(e.target.dataset.cost);
+                    const user = userAccounts.find(acc => acc.id === loggedInUserId);
+
+                    if (!user) {
+                        showModal('Error', 'User not logged in.');
+                        return;
+                    }
+                    if (user.balance < cost) {
+                        showModal('Insufficient Funds', `You need ${cost.toLocaleString()} ₮ to buy ${amount} coins, but you only have ${user.balance.toLocaleString()} ₮.`);
+                        return;
+                    }
+
+                    user.balance -= cost;
+                    user.coins += amount;
+                    saveState();
+                    updateBalanceDisplay();
+                    showModal('Purchase Successful', `You bought ${amount} coins for ${cost.toLocaleString()} ₮! Your new balance: ${user.balance.toLocaleString()} ₮, Coins: ${user.coins.toLocaleString()} 🪙.`);
+                    renderShop(); // Re-render shop to update coin counts and button states
+                });
+            });
+
+            // Profile Frames Logic
+            document.querySelectorAll('.buy-frame-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const frameId = e.target.dataset.frameId;
+                    const cost = parseInt(e.target.dataset.cost);
+                    const user = userAccounts.find(acc => acc.id === loggedInUserId);
+
+                    if (!user) {
+                        showModal('Error', 'User not logged in.');
+                        return;
+                    }
+                    if (user.coins < cost) {
+                        showModal('Insufficient Coins', `You need ${cost} coins to buy this frame, but you only have ${user.coins.toLocaleString()} 🪙.`);
+                        return;
+                    }
+
+                    user.coins -= cost;
+                    user.purchasedFrames.push(frameId);
+                    saveState();
+                    updateBalanceDisplay();
+                    showModal('Purchase Successful', `You bought "${shopItems.profileFrames.find(f => f.id === frameId).name}" for ${cost} coins! Your new coin balance: ${user.coins.toLocaleString()} 🪙.`);
+                    renderShop(); // Re-render shop to update button states
+                });
+            });
+
+            document.querySelectorAll('.equip-frame-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const frameId = e.target.dataset.frameId;
+                    const user = userAccounts.find(acc => acc.id === loggedInUserId);
+
+                    if (!user) {
+                        showModal('Error', 'User not logged in.');
+                        return;
+                    }
+
+                    user.activeFrame = frameId;
+                    saveState();
+                    showModal('Frame Equipped', `You equipped "${shopItems.profileFrames.find(f => f.id === frameId).name}".`);
+                    renderShop(); // Re-render shop to update button states
+                    activateTab('players'); // Go to player list to see the change
+                });
+            });
+
+            // Change Player ID Logic
+            const playerToChangeIdSelect = document.getElementById('playerToChangeId');
+            const changeIdTypeRadios = document.querySelectorAll('input[name="changeIdType"]');
+            const changeSilverIdSelectionDiv = document.getElementById('changeSilverIdSelection');
+            const changeGoldenIdSelectionDiv = document.getElementById('changeGoldenIdSelection');
+            const changeSpecialIdInputDiv = document.getElementById('changeSpecialIdInput');
+            const changeSilverIdSelect = document.getElementById('changeSilverId');
+            const changeGoldenIdSelect = document.getElementById('changeGoldenId');
+            const changeCustomSpecialIdInput = document.getElementById('changeCustomSpecialId');
+            const confirmIdChangeBtn = document.getElementById('confirmIdChangeBtn');
+
+            const toggleChangeIdTypeVisibility = () => {
+                changeSilverIdSelectionDiv.classList.add('hidden');
+                changeGoldenIdSelectionDiv.classList.add('hidden');
+                changeSpecialIdInputDiv.classList.add('hidden');
+
+                const selectedIdType = document.querySelector('input[name="changeIdType"]:checked').value;
+                if (selectedIdType === 'silver') {
+                    changeSilverIdSelectionDiv.classList.remove('hidden');
+                } else if (selectedIdType === 'golden') {
+                    changeGoldenIdSelectionDiv.classList.remove('hidden');
+                } else if (selectedIdType === 'special') {
+                    changeSpecialIdInputDiv.classList.remove('hidden');
+                }
+            };
+
+            changeIdTypeRadios.forEach(radio => radio.addEventListener('change', toggleChangeIdTypeVisibility));
+            toggleChangeIdTypeVisibility(); // Initial call
+
+            confirmIdChangeBtn.addEventListener('click', () => {
+                const selectedPlayerId = playerToChangeIdSelect.value;
+                if (!selectedPlayerId) {
+                    showModal('Error', 'Please select a player to change their ID.');
+                    return;
+                }
+
+                const playerToUpdate = players.find(p => p.id === selectedPlayerId);
+                if (!playerToUpdate) {
+                    showModal('Error', 'Selected player not found.');
+                    return;
+                }
+
+                const userAccount = userAccounts.find(acc => acc.id === loggedInUserId);
+                if (!userAccount) {
+                    showModal('Error', 'User not logged in.');
+                    return;
+                }
+
+                if (userAccount.coins < shopItems.playerIDChangeCost) {
+                    showModal('Insufficient Coins', `You need ${shopItems.playerIDChangeCost} coins to change a player ID, but you only have ${userAccount.coins.toLocaleString()} 🪙.`);
+                    return;
+                }
+
+                const newIdType = document.querySelector('input[name="changeIdType"]:checked').value;
+                let newPlayerId;
+                let newIdCost = 0; // Additional cost for ID type itself
+
+                // Release old special ID if applicable
+                if (playerToUpdate.idType !== 'normal' && usedSpecialIds.has(playerToUpdate.id)) {
+                    usedSpecialIds.delete(playerToUpdate.id);
+                }
+
+                if (newIdType === 'normal') {
+                    newPlayerId = generateNormalId();
+                } else if (newIdType === 'silver') {
+                    newPlayerId = changeSilverIdSelect.value;
+                    if (!newPlayerId) { showModal('Error', 'Please select a Silver ID.'); return; }
+                    if (isIdUsed(newPlayerId, true)) { showModal('Error', 'Selected Silver ID is already taken.'); return; }
+                    newIdCost = SILVER_ID_COST;
+                } else if (newIdType === 'golden') {
+                    newPlayerId = changeGoldenIdSelect.value;
+                    if (!newPlayerId) { showModal('Error', 'Please select a Golden ID.'); return; }
+                    if (isIdUsed(newPlayerId, true)) { showModal('Error', 'Selected Golden ID is already taken.'); return; }
+                    newIdCost = GOLDEN_ID_COST;
+                } else if (newIdType === 'special') {
+                    newPlayerId = changeCustomSpecialIdInput.value.trim();
+                    if (!newPlayerId) { showModal('Error', 'Please enter a custom Special ID.'); return; }
+                    if (newPlayerId.length < 3) { showModal('Error', 'Special ID must be at least 3 characters long.'); return; }
+                    if (/\d/.test(newPlayerId)) { showModal('Error', 'Special ID cannot contain numbers.'); return; }
+                    if (isIdUsed(newPlayerId, true)) { showModal('Error', 'This custom Special ID is already taken.'); return; }
+                    newIdCost = SPECIAL_ID_COST;
+                }
+
+                // Check if user has enough Tugrug for the new ID type (if applicable)
+                if (newIdCost > 0 && userAccount.balance < newIdCost) {
+                    showModal('Payment Error', `Insufficient balance. You need ${newIdCost.toLocaleString()} ₮ for this ID type.`);
+                    return;
+                }
+
+                // Deduct costs
+                userAccount.coins -= shopItems.playerIDChangeCost;
+                userAccount.balance -= newIdCost;
+                currentUserCoins = userAccount.coins;
+                currentUserBalance = userAccount.balance;
+
+                // Update player's ID and type
+                playerToUpdate.id = newPlayerId;
+                playerToUpdate.idType = newIdType;
+
+                // Mark new special ID as used
+                if (newIdType !== 'normal') {
+                    usedSpecialIds.add(newPlayerId);
+                }
+
+                saveState();
+                updateBalanceDisplay();
+                showModal('ID Change Successful', `Player "${playerToUpdate.name}"'s ID has been changed to "${newPlayerId}"! Cost: ${shopItems.playerIDChangeCost} 🪙${newIdCost > 0 ? ` and ${newIdCost.toLocaleString()} ₮` : ''}.`);
+                renderShop(); // Re-render shop to update available IDs
+                activateTab('players'); // Go to player list to see the change
+            });
+        };
+
+
         // --- Main Render Logic ---
         const renderContent = (tab) => {
             const user = userAccounts.find(acc => acc.id === loggedInUserId);
             document.getElementById('loggedInUserIdDisplay').textContent = user ? user.id.toUpperCase() : 'Not Logged In';
             updateBalanceDisplay(); // Always update balance display
 
-            if (!loggedInUserId) {
+            // If not logged in and trying to access a restricted tab, redirect to login
+            if (!loggedInUserId && tab !== 'registerPlayer') {
                 renderLogin();
                 return;
             }
 
             switch (tab) {
                 case 'registerPlayer':
-                    // Only render if admin
-                    if (isCurrentUserAdmin) {
-                        renderRegisterPlayer();
-                    } else {
-                        // If not admin, redirect to players list and show error
+                    // If logged in and not admin, deny access.
+                    // If not logged in, or if admin, allow.
+                    if (loggedInUserId && !isCurrentUserAdmin) {
                         showModal('Access Denied', 'Only administrators can register new players.');
-                        activateTab('players');
+                        activateTab('players'); // Redirect to players list
+                    } else {
+                        renderRegisterPlayer();
                     }
                     break;
                 case 'players':
@@ -1653,8 +2217,16 @@
                 case 'duels':
                     renderActiveDuels();
                     break;
+                case 'shop':
+                    renderShop();
+                    break;
                 default:
-                    renderPlayerList(); // Default to player list tab after login
+                    // If logged in, default to players. If not, default to login.
+                    if (loggedInUserId) {
+                        renderPlayerList();
+                    } else {
+                        renderLogin();
+                    }
             }
         };
 
@@ -1673,6 +2245,7 @@
                 const user = userAccounts.find(acc => acc.id === loggedInUserId);
                 if (user) {
                     currentUserBalance = user.balance;
+                    currentUserCoins = user.coins;
                     isCurrentUserAdmin = user.isAdmin || false;
                     renderMainAppContent();
                 } else {
@@ -1688,4 +2261,3 @@
     </script>
 </body>
 </html>
-
